@@ -2,6 +2,7 @@ import bcrypt from "bcryptjs";
 import { NextResponse } from "next/server";
 import { connectToDatabase } from "@/lib/db";
 import { signAccessToken } from "@/lib/jwt";
+import { getAuthCookieOptions } from "@/lib/session";
 import { User } from "@/models/User";
 
 type RegisterBody = {
@@ -63,13 +64,7 @@ export async function POST(request: Request) {
       { status: 201 }
     );
 
-    response.cookies.set("access_token", token, {
-      httpOnly: true,
-      secure: process.env.NODE_ENV === "production",
-      sameSite: "lax",
-      path: "/",
-      maxAge: 60 * 60 * 24 * 7,
-    });
+    response.cookies.set("access_token", token, getAuthCookieOptions());
 
     return response;
   } catch (error) {

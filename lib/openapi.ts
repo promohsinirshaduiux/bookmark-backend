@@ -24,6 +24,14 @@ export const openApiSpec = {
       name: "My App Shortcuts",
       description: "User-linked app shortcuts",
     },
+    {
+      name: "Bookmarks",
+      description: "User bookmarks",
+    },
+    {
+      name: "Tags",
+      description: "User bookmark tags",
+    },
   ],
   components: {
     securitySchemes: {
@@ -129,6 +137,7 @@ export const openApiSpec = {
         type: "object",
         properties: {
           id: { type: "string", example: "683c44c07bc9fb0f2b9e5701" },
+          source: { type: "string", example: "system" },
           url: { type: "string", example: "https://www.youtube.com" },
           category: { type: "string", example: "Social & Community" },
           name: { type: "string", nullable: true, example: "YouTube" },
@@ -165,6 +174,135 @@ export const openApiSpec = {
             type: "array",
             items: { type: "string" },
             example: ["683c44c07bc9fb0f2b9e5701", "683c44c07bc9fb0f2b9e5702"],
+          },
+        },
+      },
+      CreateMyCustomAppShortcutRequest: {
+        type: "object",
+        required: ["url"],
+        properties: {
+          url: { type: "string", example: "https://example.com" },
+          category: { type: "string", example: "Custom" },
+          name: { type: "string", example: "My Site" },
+          title: { type: "string", example: "My Site" },
+          iconUrl: {
+            type: "string",
+            example: "https://example.com/favicon.ico",
+          },
+        },
+      },
+      Bookmark: {
+        type: "object",
+        properties: {
+          id: { type: "string", example: "683c44c07bc9fb0f2b9e5701" },
+          url: { type: "string", example: "https://example.com" },
+          title: { type: "string", nullable: true, example: "My bookmark" },
+          description: {
+            type: "string",
+            nullable: true,
+            example: "What this page is about",
+          },
+          iconUrl: {
+            type: "string",
+            nullable: true,
+            example: "https://example.com/favicon.ico",
+          },
+          tags: {
+            type: "array",
+            items: { $ref: "#/components/schemas/Tag" },
+          },
+          isArchive: { type: "boolean", example: false },
+          createdAt: {
+            type: "string",
+            format: "date-time",
+            example: "2026-06-04T10:15:30.000Z",
+          },
+          updatedAt: {
+            type: "string",
+            format: "date-time",
+            example: "2026-06-04T10:15:30.000Z",
+          },
+        },
+      },
+      CreateBookmarkRequest: {
+        type: "object",
+        required: ["url"],
+        properties: {
+          url: { type: "string", example: "https://example.com" },
+          title: { type: "string", example: "My bookmark" },
+          description: { type: "string", example: "What this page is about" },
+          iconUrl: {
+            type: "string",
+            example: "https://example.com/favicon.ico",
+          },
+          tagIds: {
+            type: "array",
+            items: { type: "string" },
+            example: ["683c44c07bc9fb0f2b9e5701"],
+          },
+          isArchive: { type: "boolean", example: false },
+        },
+      },
+      BulkCreateBookmarksRequest: {
+        type: "object",
+        required: ["bookmarks"],
+        properties: {
+          bookmarks: {
+            type: "array",
+            items: { $ref: "#/components/schemas/CreateBookmarkRequest" },
+          },
+        },
+      },
+      UpdateBookmarkRequest: {
+        type: "object",
+        properties: {
+          url: { type: "string", example: "https://example.com" },
+          title: { type: "string", example: "Updated title" },
+          description: { type: "string", example: "Updated description" },
+          iconUrl: {
+            type: "string",
+            example: "https://example.com/favicon.ico",
+          },
+          tagIds: {
+            type: "array",
+            items: { type: "string" },
+            example: ["683c44c07bc9fb0f2b9e5701"],
+          },
+          isArchive: { type: "boolean", example: true },
+        },
+      },
+      Tag: {
+        type: "object",
+        properties: {
+          id: { type: "string", example: "683c44c07bc9fb0f2b9e5701" },
+          name: { type: "string", example: "code" },
+          color: { type: "string", example: "#6366F1" },
+          isSystemDefault: { type: "boolean", example: true },
+          bookmarkCount: { type: "number", example: 3 },
+        },
+      },
+      CreateTagRequest: {
+        type: "object",
+        required: ["name", "color"],
+        properties: {
+          name: { type: "string", example: "backend" },
+          color: { type: "string", example: "#22C55E" },
+        },
+      },
+      UpdateTagRequest: {
+        type: "object",
+        properties: {
+          name: { type: "string", example: "reference" },
+          color: { type: "string", example: "#8B5CF6" },
+        },
+      },
+      MoveTagBookmarksRequest: {
+        type: "object",
+        required: ["targetTagId"],
+        properties: {
+          targetTagId: {
+            type: "string",
+            example: "683c44c07bc9fb0f2b9e5702",
           },
         },
       },
@@ -242,6 +380,65 @@ export const openApiSpec = {
           },
           "401": {
             description: "Invalid credentials",
+            content: {
+              "application/json": {
+                schema: { $ref: "#/components/schemas/ErrorResponse" },
+              },
+            },
+          },
+        },
+      },
+    },
+    "/api/auth/logout": {
+      post: {
+        tags: ["Auth"],
+        summary: "Logout user and clear session cookie",
+        responses: {
+          "200": {
+            description: "Logout successful",
+            content: {
+              "application/json": {
+                schema: { $ref: "#/components/schemas/GenericResponse" },
+              },
+            },
+          },
+        },
+      },
+    },
+    "/api/auth/me": {
+      get: {
+        tags: ["Auth"],
+        summary: "Get current logged-in user",
+        security: [{ bearerAuth: [] }],
+        responses: {
+          "200": {
+            description: "Current user fetched successfully",
+            content: {
+              "application/json": {
+                schema: {
+                  type: "object",
+                  properties: {
+                    success: { type: "boolean", example: true },
+                    message: {
+                      type: "string",
+                      example: "User fetched successfully.",
+                    },
+                    user: { $ref: "#/components/schemas/User" },
+                  },
+                },
+              },
+            },
+          },
+          "401": {
+            description: "Unauthorized",
+            content: {
+              "application/json": {
+                schema: { $ref: "#/components/schemas/ErrorResponse" },
+              },
+            },
+          },
+          "404": {
+            description: "User not found",
             content: {
               "application/json": {
                 schema: { $ref: "#/components/schemas/ErrorResponse" },
@@ -527,6 +724,677 @@ export const openApiSpec = {
             content: {
               "application/json": {
                 schema: { $ref: "#/components/schemas/ErrorResponse" },
+              },
+            },
+          },
+        },
+      },
+    },
+    "/api/my-app-shortcuts/custom": {
+      post: {
+        tags: ["My App Shortcuts"],
+        summary: "Create a custom shortcut only for the logged-in user",
+        security: [{ bearerAuth: [] }],
+        requestBody: {
+          required: true,
+          content: {
+            "application/json": {
+              schema: {
+                $ref: "#/components/schemas/CreateMyCustomAppShortcutRequest",
+              },
+            },
+          },
+        },
+        responses: {
+          "201": {
+            description: "Custom shortcut created successfully",
+            content: {
+              "application/json": {
+                schema: {
+                  type: "object",
+                  properties: {
+                    success: { type: "boolean", example: true },
+                    message: {
+                      type: "string",
+                      example:
+                        "Custom app shortcut added to your account successfully.",
+                    },
+                    data: { $ref: "#/components/schemas/AppShortcut" },
+                  },
+                },
+              },
+            },
+          },
+          "400": {
+            description: "Validation error",
+            content: {
+              "application/json": {
+                schema: { $ref: "#/components/schemas/ErrorResponse" },
+              },
+            },
+          },
+          "401": {
+            description: "Unauthorized",
+            content: {
+              "application/json": {
+                schema: { $ref: "#/components/schemas/ErrorResponse" },
+              },
+            },
+          },
+          "404": {
+            description: "User not found",
+            content: {
+              "application/json": {
+                schema: { $ref: "#/components/schemas/ErrorResponse" },
+              },
+            },
+          },
+          "409": {
+            description: "Shortcut already exists in user's shortcuts",
+            content: {
+              "application/json": {
+                schema: { $ref: "#/components/schemas/ErrorResponse" },
+              },
+            },
+          },
+        },
+      },
+    },
+    "/api/bookmarks": {
+      get: {
+        tags: ["Bookmarks"],
+        summary: "Get all bookmarks for the logged-in user",
+        security: [{ bearerAuth: [] }],
+        responses: {
+          "200": {
+            description: "Bookmarks fetched successfully",
+            content: {
+              "application/json": {
+                schema: {
+                  type: "object",
+                  properties: {
+                    success: { type: "boolean", example: true },
+                    message: {
+                      type: "string",
+                      example: "Bookmarks fetched successfully.",
+                    },
+                    data: {
+                      type: "array",
+                      items: { $ref: "#/components/schemas/Bookmark" },
+                    },
+                  },
+                },
+              },
+            },
+          },
+          "401": {
+            description: "Unauthorized",
+            content: {
+              "application/json": {
+                schema: { $ref: "#/components/schemas/ErrorResponse" },
+              },
+            },
+          },
+        },
+      },
+      delete: {
+        tags: ["Bookmarks"],
+        summary: "Delete all bookmarks for the logged-in user",
+        security: [{ bearerAuth: [] }],
+        parameters: [
+          {
+            name: "isArchive",
+            in: "query",
+            required: false,
+            schema: { type: "boolean" },
+            description:
+              "Optional filter to delete only archived or only active bookmarks.",
+          },
+        ],
+        responses: {
+          "200": {
+            description: "Bookmarks deleted successfully",
+            content: {
+              "application/json": {
+                schema: {
+                  type: "object",
+                  properties: {
+                    success: { type: "boolean", example: true },
+                    message: {
+                      type: "string",
+                      example: "Bookmarks deleted successfully.",
+                    },
+                    deletedCount: { type: "number", example: 12 },
+                  },
+                },
+              },
+            },
+          },
+          "401": {
+            description: "Unauthorized",
+            content: {
+              "application/json": {
+                schema: { $ref: "#/components/schemas/ErrorResponse" },
+              },
+            },
+          },
+        },
+      },
+      post: {
+        tags: ["Bookmarks"],
+        summary: "Add a bookmark for the logged-in user",
+        security: [{ bearerAuth: [] }],
+        requestBody: {
+          required: true,
+          content: {
+            "application/json": {
+              schema: { $ref: "#/components/schemas/CreateBookmarkRequest" },
+            },
+          },
+        },
+        responses: {
+          "201": {
+            description: "Bookmark created successfully",
+            content: {
+              "application/json": {
+                schema: {
+                  type: "object",
+                  properties: {
+                    success: { type: "boolean", example: true },
+                    message: {
+                      type: "string",
+                      example: "Bookmark added successfully.",
+                    },
+                    data: { $ref: "#/components/schemas/Bookmark" },
+                  },
+                },
+              },
+            },
+          },
+          "400": {
+            description: "Validation error",
+            content: {
+              "application/json": {
+                schema: { $ref: "#/components/schemas/ErrorResponse" },
+              },
+            },
+          },
+          "401": {
+            description: "Unauthorized",
+            content: {
+              "application/json": {
+                schema: { $ref: "#/components/schemas/ErrorResponse" },
+              },
+            },
+          },
+          "409": {
+            description: "Duplicate bookmark",
+            content: {
+              "application/json": {
+                schema: { $ref: "#/components/schemas/ErrorResponse" },
+              },
+            },
+          },
+        },
+      },
+    },
+    "/api/bookmarks/bulk": {
+      post: {
+        tags: ["Bookmarks"],
+        summary: "Import bookmarks in bulk for the logged-in user",
+        security: [{ bearerAuth: [] }],
+        requestBody: {
+          required: true,
+          content: {
+            "application/json": {
+              schema: { $ref: "#/components/schemas/BulkCreateBookmarksRequest" },
+            },
+          },
+        },
+        responses: {
+          "200": {
+            description: "Bookmarks imported successfully",
+            content: {
+              "application/json": {
+                schema: {
+                  type: "object",
+                  properties: {
+                    success: { type: "boolean", example: true },
+                    message: {
+                      type: "string",
+                      example: "Bookmarks imported successfully.",
+                    },
+                    createdCount: { type: "number", example: 8 },
+                    skippedCount: { type: "number", example: 2 },
+                    skipped: {
+                      type: "array",
+                      items: {
+                        type: "object",
+                        properties: {
+                          url: {
+                            type: "string",
+                            nullable: true,
+                            example: "https://example.com",
+                          },
+                          reason: {
+                            type: "string",
+                            example: "This URL already exists in your bookmarks.",
+                          },
+                        },
+                      },
+                    },
+                    data: {
+                      type: "array",
+                      items: { $ref: "#/components/schemas/Bookmark" },
+                    },
+                  },
+                },
+              },
+            },
+          },
+          "400": {
+            description: "Validation error",
+            content: {
+              "application/json": {
+                schema: { $ref: "#/components/schemas/ErrorResponse" },
+              },
+            },
+          },
+          "401": {
+            description: "Unauthorized",
+            content: {
+              "application/json": {
+                schema: { $ref: "#/components/schemas/ErrorResponse" },
+              },
+            },
+          },
+          "404": {
+            description: "Tag not found",
+            content: {
+              "application/json": {
+                schema: { $ref: "#/components/schemas/ErrorResponse" },
+              },
+            },
+          },
+        },
+      },
+    },
+    "/api/bookmarks/{id}": {
+      patch: {
+        tags: ["Bookmarks"],
+        summary: "Update a bookmark for the logged-in user",
+        security: [{ bearerAuth: [] }],
+        parameters: [
+          {
+            name: "id",
+            in: "path",
+            required: true,
+            schema: { type: "string" },
+          },
+        ],
+        requestBody: {
+          required: true,
+          content: {
+            "application/json": {
+              schema: { $ref: "#/components/schemas/UpdateBookmarkRequest" },
+            },
+          },
+        },
+        responses: {
+          "200": {
+            description: "Bookmark updated successfully",
+            content: {
+              "application/json": {
+                schema: {
+                  type: "object",
+                  properties: {
+                    success: { type: "boolean", example: true },
+                    message: {
+                      type: "string",
+                      example: "Bookmark updated successfully.",
+                    },
+                    data: { $ref: "#/components/schemas/Bookmark" },
+                  },
+                },
+              },
+            },
+          },
+          "400": {
+            description: "Validation error",
+            content: {
+              "application/json": {
+                schema: { $ref: "#/components/schemas/ErrorResponse" },
+              },
+            },
+          },
+          "401": {
+            description: "Unauthorized",
+            content: {
+              "application/json": {
+                schema: { $ref: "#/components/schemas/ErrorResponse" },
+              },
+            },
+          },
+          "404": {
+            description: "Bookmark not found",
+            content: {
+              "application/json": {
+                schema: { $ref: "#/components/schemas/ErrorResponse" },
+              },
+            },
+          },
+          "409": {
+            description: "Duplicate bookmark",
+            content: {
+              "application/json": {
+                schema: { $ref: "#/components/schemas/ErrorResponse" },
+              },
+            },
+          },
+        },
+      },
+      delete: {
+        tags: ["Bookmarks"],
+        summary: "Delete a bookmark for the logged-in user",
+        security: [{ bearerAuth: [] }],
+        parameters: [
+          {
+            name: "id",
+            in: "path",
+            required: true,
+            schema: { type: "string" },
+          },
+        ],
+        responses: {
+          "200": {
+            description: "Bookmark deleted successfully",
+            content: {
+              "application/json": {
+                schema: { $ref: "#/components/schemas/GenericResponse" },
+              },
+            },
+          },
+          "400": {
+            description: "Validation error",
+            content: {
+              "application/json": {
+                schema: { $ref: "#/components/schemas/ErrorResponse" },
+              },
+            },
+          },
+          "401": {
+            description: "Unauthorized",
+            content: {
+              "application/json": {
+                schema: { $ref: "#/components/schemas/ErrorResponse" },
+              },
+            },
+          },
+          "404": {
+            description: "Bookmark not found",
+            content: {
+              "application/json": {
+                schema: { $ref: "#/components/schemas/ErrorResponse" },
+              },
+            },
+          },
+        },
+      },
+    },
+    "/api/bookmarks/tags": {
+      delete: {
+        tags: ["Bookmarks"],
+        summary: "Remove all tag assignments from the logged-in user's bookmarks",
+        security: [{ bearerAuth: [] }],
+        parameters: [
+          {
+            name: "isArchive",
+            in: "query",
+            required: false,
+            schema: { type: "boolean" },
+            description:
+              "Optional filter to remove tags only from archived or only from active bookmarks.",
+          },
+        ],
+        responses: {
+          "200": {
+            description: "Bookmark tags removed successfully",
+            content: {
+              "application/json": {
+                schema: {
+                  type: "object",
+                  properties: {
+                    success: { type: "boolean", example: true },
+                    message: {
+                      type: "string",
+                      example: "Tags removed from bookmarks successfully.",
+                    },
+                    updatedCount: { type: "number", example: 12 },
+                  },
+                },
+              },
+            },
+          },
+          "401": {
+            description: "Unauthorized",
+            content: {
+              "application/json": {
+                schema: { $ref: "#/components/schemas/ErrorResponse" },
+              },
+            },
+          },
+        },
+      },
+    },
+    "/api/tags": {
+      get: {
+        tags: ["Tags"],
+        summary: "Get all tags for the logged-in user",
+        security: [{ bearerAuth: [] }],
+        responses: {
+          "200": {
+            description: "Tags fetched successfully",
+            content: {
+              "application/json": {
+                schema: {
+                  type: "object",
+                  properties: {
+                    success: { type: "boolean", example: true },
+                    message: {
+                      type: "string",
+                      example: "Tags fetched successfully.",
+                    },
+                    data: {
+                      type: "array",
+                      items: { $ref: "#/components/schemas/Tag" },
+                    },
+                  },
+                },
+              },
+            },
+          },
+        },
+      },
+      post: {
+        tags: ["Tags"],
+        summary: "Create a new tag for the logged-in user",
+        security: [{ bearerAuth: [] }],
+        requestBody: {
+          required: true,
+          content: {
+            "application/json": {
+              schema: { $ref: "#/components/schemas/CreateTagRequest" },
+            },
+          },
+        },
+        responses: {
+          "201": {
+            description: "Tag created successfully",
+            content: {
+              "application/json": {
+                schema: {
+                  type: "object",
+                  properties: {
+                    success: { type: "boolean", example: true },
+                    message: {
+                      type: "string",
+                      example: "Tag created successfully.",
+                    },
+                    data: { $ref: "#/components/schemas/Tag" },
+                  },
+                },
+              },
+            },
+          },
+          "409": {
+            description: "Duplicate tag",
+            content: {
+              "application/json": {
+                schema: { $ref: "#/components/schemas/ErrorResponse" },
+              },
+            },
+          },
+        },
+      },
+    },
+    "/api/tags/{id}": {
+      patch: {
+        tags: ["Tags"],
+        summary: "Rename a tag or change its color",
+        security: [{ bearerAuth: [] }],
+        parameters: [
+          {
+            name: "id",
+            in: "path",
+            required: true,
+            schema: { type: "string" },
+          },
+        ],
+        requestBody: {
+          required: true,
+          content: {
+            "application/json": {
+              schema: { $ref: "#/components/schemas/UpdateTagRequest" },
+            },
+          },
+        },
+        responses: {
+          "200": {
+            description: "Tag updated successfully",
+            content: {
+              "application/json": {
+                schema: {
+                  type: "object",
+                  properties: {
+                    success: { type: "boolean", example: true },
+                    message: {
+                      type: "string",
+                      example: "Tag updated successfully.",
+                    },
+                    data: { $ref: "#/components/schemas/Tag" },
+                  },
+                },
+              },
+            },
+          },
+        },
+      },
+      delete: {
+        tags: ["Tags"],
+        summary: "Delete a tag and remove it from bookmarks",
+        security: [{ bearerAuth: [] }],
+        parameters: [
+          {
+            name: "id",
+            in: "path",
+            required: true,
+            schema: { type: "string" },
+          },
+        ],
+        responses: {
+          "200": {
+            description: "Tag deleted successfully",
+            content: {
+              "application/json": {
+                schema: { $ref: "#/components/schemas/GenericResponse" },
+              },
+            },
+          },
+        },
+      },
+    },
+    "/api/tags/{id}/move-bookmarks": {
+      post: {
+        tags: ["Tags"],
+        summary: "Move bookmarks from one tag to another",
+        security: [{ bearerAuth: [] }],
+        parameters: [
+          {
+            name: "id",
+            in: "path",
+            required: true,
+            schema: { type: "string" },
+          },
+        ],
+        requestBody: {
+          required: true,
+          content: {
+            "application/json": {
+              schema: { $ref: "#/components/schemas/MoveTagBookmarksRequest" },
+            },
+          },
+        },
+        responses: {
+          "200": {
+            description: "Bookmarks moved successfully",
+            content: {
+              "application/json": {
+                schema: {
+                  type: "object",
+                  properties: {
+                    success: { type: "boolean", example: true },
+                    message: {
+                      type: "string",
+                      example: "Bookmarks moved to the target tag successfully.",
+                    },
+                    updatedCount: { type: "number", example: 4 },
+                  },
+                },
+              },
+            },
+          },
+        },
+      },
+    },
+    "/api/tags/{id}/bookmarks": {
+      delete: {
+        tags: ["Tags"],
+        summary: "Delete all bookmarks under a tag",
+        security: [{ bearerAuth: [] }],
+        parameters: [
+          {
+            name: "id",
+            in: "path",
+            required: true,
+            schema: { type: "string" },
+          },
+        ],
+        responses: {
+          "200": {
+            description: "Bookmarks deleted successfully",
+            content: {
+              "application/json": {
+                schema: {
+                  type: "object",
+                  properties: {
+                    success: { type: "boolean", example: true },
+                    message: {
+                      type: "string",
+                      example: "Bookmarks under this tag deleted successfully.",
+                    },
+                    deletedCount: { type: "number", example: 3 },
+                  },
+                },
               },
             },
           },

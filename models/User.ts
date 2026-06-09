@@ -11,6 +11,26 @@ const userSchema = new Schema(
       type: [{ type: Schema.Types.ObjectId, ref: "AppShortcut" }],
       default: [],
     },
+    myCustomAppShortcuts: {
+      type: [
+        new Schema(
+          {
+            url: { type: String, required: true, trim: true },
+            category: {
+              type: String,
+              required: true,
+              trim: true,
+              default: "Custom",
+            },
+            name: { type: String, trim: true, default: null },
+            title: { type: String, trim: true, default: null },
+            iconUrl: { type: String, trim: true, default: null },
+          },
+          { _id: true, timestamps: true },
+        ),
+      ],
+      default: [],
+    },
   },
   {
     timestamps: true,

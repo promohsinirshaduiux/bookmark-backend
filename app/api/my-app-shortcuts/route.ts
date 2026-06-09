@@ -307,7 +307,7 @@ export async function GET(request: NextRequest) {
     await connectToDatabase();
 
     const user = await User.findById(auth.payload.sub)
-      .select("myAppShortcutIds")
+      .select("myAppShortcutIds myCustomAppShortcuts")
       .lean();
 
     if (!user) {
@@ -333,6 +333,7 @@ export async function GET(request: NextRequest) {
       .filter(Boolean)
       .map((item) => ({
         id: item!._id.toString(),
+        source: "system",
         url: item!.url,
         category: item!.category ?? "Custom",
         name: item!.name ?? null,
@@ -340,9 +341,30 @@ export async function GET(request: NextRequest) {
         iconUrl: item!.iconUrl ?? null,
       }));
 
+    const customShortcuts = (
+      (user.myCustomAppShortcuts as
+        | Array<{
+            _id: Types.ObjectId;
+            url: string;
+            category?: string;
+            name?: string | null;
+            title?: string | null;
+            iconUrl?: string | null;
+          }>
+        | undefined) ?? []
+    ).map((item) => ({
+      id: item._id.toString(),
+      source: "custom",
+      url: item.url,
+      category: item.category ?? "Custom",
+      name: item.name ?? null,
+      title: item.title ?? null,
+      iconUrl: item.iconUrl ?? null,
+    }));
+
     return NextResponse.json({
       success: true,
-      data: ordered,
+      data: [...ordered, ...customShortcuts],
     });
   } catch (error) {
     console.error("Get my app shortcuts API error:", error);
