@@ -55,6 +55,29 @@ export const openApiSpec = {
           password: { type: "string", format: "password", example: "pass1234" },
         },
       },
+      VerifyRegisterOtpRequest: {
+        type: "object",
+        required: ["email", "otp"],
+        properties: {
+          email: {
+            type: "string",
+            format: "email",
+            example: "john@example.com",
+          },
+          otp: { type: "string", example: "483920" },
+        },
+      },
+      ResendRegisterOtpRequest: {
+        type: "object",
+        required: ["email"],
+        properties: {
+          email: {
+            type: "string",
+            format: "email",
+            example: "john@example.com",
+          },
+        },
+      },
       LoginRequest: {
         type: "object",
         required: ["email", "password"],
@@ -65,6 +88,21 @@ export const openApiSpec = {
             example: "john@example.com",
           },
           password: { type: "string", format: "password", example: "pass1234" },
+        },
+      },
+      GoogleAuthRequest: {
+        type: "object",
+        required: ["idToken"],
+        properties: {
+          idToken: {
+            type: "string",
+            example: "eyJhbGciOiJSUzI1NiIsImtpZCI6Ij...",
+          },
+          clientType: {
+            type: "string",
+            enum: ["web", "extension"],
+            example: "web",
+          },
         },
       },
       ForgotRequest: {
@@ -124,6 +162,40 @@ export const openApiSpec = {
         properties: {
           success: { type: "boolean", example: true },
           message: { type: "string", example: "Operation completed." },
+        },
+      },
+      RegisterOtpResponse: {
+        type: "object",
+        properties: {
+          success: { type: "boolean", example: true },
+          message: {
+            type: "string",
+            example: "Registration OTP generated successfully.",
+          },
+          email: {
+            type: "string",
+            format: "email",
+            example: "john@example.com",
+          },
+          registerOtp: { type: "string", example: "483920" },
+          expiresInMinutes: { type: "number", example: 15 },
+        },
+      },
+      PendingVerificationResponse: {
+        type: "object",
+        properties: {
+          success: { type: "boolean", example: false },
+          message: {
+            type: "string",
+            example: "Registration is pending verification. Please verify OTP or resend OTP.",
+          },
+          email: {
+            type: "string",
+            format: "email",
+            example: "john@example.com",
+          },
+          requiresVerification: { type: "boolean", example: true },
+          canResendOtp: { type: "boolean", example: true },
         },
       },
       ErrorResponse: {
@@ -224,6 +296,17 @@ export const openApiSpec = {
           },
         },
       },
+      PaginationMeta: {
+        type: "object",
+        properties: {
+          page: { type: "number", example: 1 },
+          limit: { type: "number", example: 20 },
+          total: { type: "number", example: 57 },
+          totalPages: { type: "number", example: 3 },
+          hasNextPage: { type: "boolean", example: true },
+          hasPreviousPage: { type: "boolean", example: false },
+        },
+      },
       CreateBookmarkRequest: {
         type: "object",
         required: ["url"],
@@ -312,7 +395,7 @@ export const openApiSpec = {
     "/api/auth/register": {
       post: {
         tags: ["Auth"],
-        summary: "Register a new user",
+        summary: "Start registration by generating OTP",
         requestBody: {
           required: true,
           content: {
@@ -322,8 +405,101 @@ export const openApiSpec = {
           },
         },
         responses: {
+          "200": {
+            description: "Registration OTP generated",
+            content: {
+              "application/json": {
+                schema: { $ref: "#/components/schemas/RegisterOtpResponse" },
+              },
+            },
+          },
+          "400": {
+            description: "Validation error",
+            content: {
+              "application/json": {
+                schema: { $ref: "#/components/schemas/ErrorResponse" },
+              },
+            },
+          },
+          "409": {
+            description: "Email already exists or verification is pending",
+            content: {
+              "application/json": {
+                schema: {
+                  oneOf: [
+                    { $ref: "#/components/schemas/ErrorResponse" },
+                    { $ref: "#/components/schemas/PendingVerificationResponse" },
+                  ],
+                },
+              },
+            },
+          },
+        },
+      },
+    },
+    "/api/auth/register/resend-otp": {
+      post: {
+        tags: ["Auth"],
+        summary: "Resend registration OTP for a pending signup",
+        requestBody: {
+          required: true,
+          content: {
+            "application/json": {
+              schema: { $ref: "#/components/schemas/ResendRegisterOtpRequest" },
+            },
+          },
+        },
+        responses: {
+          "200": {
+            description: "Registration OTP resent successfully",
+            content: {
+              "application/json": {
+                schema: { $ref: "#/components/schemas/RegisterOtpResponse" },
+              },
+            },
+          },
+          "400": {
+            description: "Validation error",
+            content: {
+              "application/json": {
+                schema: { $ref: "#/components/schemas/ErrorResponse" },
+              },
+            },
+          },
+          "404": {
+            description: "Pending registration not found",
+            content: {
+              "application/json": {
+                schema: { $ref: "#/components/schemas/ErrorResponse" },
+              },
+            },
+          },
+          "409": {
+            description: "Email already registered",
+            content: {
+              "application/json": {
+                schema: { $ref: "#/components/schemas/ErrorResponse" },
+              },
+            },
+          },
+        },
+      },
+    },
+    "/api/auth/register/verify-otp": {
+      post: {
+        tags: ["Auth"],
+        summary: "Verify registration OTP and create user",
+        requestBody: {
+          required: true,
+          content: {
+            "application/json": {
+              schema: { $ref: "#/components/schemas/VerifyRegisterOtpRequest" },
+            },
+          },
+        },
+        responses: {
           "201": {
-            description: "User registered",
+            description: "User registered successfully",
             content: {
               "application/json": {
                 schema: { $ref: "#/components/schemas/AuthSuccessResponse" },
@@ -331,7 +507,15 @@ export const openApiSpec = {
             },
           },
           "400": {
-            description: "Validation error",
+            description: "Invalid OTP or validation error",
+            content: {
+              "application/json": {
+                schema: { $ref: "#/components/schemas/ErrorResponse" },
+              },
+            },
+          },
+          "404": {
+            description: "Pending registration not found",
             content: {
               "application/json": {
                 schema: { $ref: "#/components/schemas/ErrorResponse" },
@@ -371,7 +555,7 @@ export const openApiSpec = {
             },
           },
           "400": {
-            description: "Validation error",
+            description: "Validation error or account requires Google login",
             content: {
               "application/json": {
                 schema: { $ref: "#/components/schemas/ErrorResponse" },
@@ -380,6 +564,54 @@ export const openApiSpec = {
           },
           "401": {
             description: "Invalid credentials",
+            content: {
+              "application/json": {
+                schema: { $ref: "#/components/schemas/ErrorResponse" },
+              },
+            },
+          },
+          "403": {
+            description: "Account exists but is not verified yet",
+            content: {
+              "application/json": {
+                schema: { $ref: "#/components/schemas/PendingVerificationResponse" },
+              },
+            },
+          },
+        },
+      },
+    },
+    "/api/auth/google": {
+      post: {
+        tags: ["Auth"],
+        summary: "Login or register user with Google",
+        requestBody: {
+          required: true,
+          content: {
+            "application/json": {
+              schema: { $ref: "#/components/schemas/GoogleAuthRequest" },
+            },
+          },
+        },
+        responses: {
+          "200": {
+            description: "Google login successful",
+            content: {
+              "application/json": {
+                schema: { $ref: "#/components/schemas/AuthSuccessResponse" },
+              },
+            },
+          },
+          "400": {
+            description: "Validation error or invalid Google token",
+            content: {
+              "application/json": {
+                schema: { $ref: "#/components/schemas/ErrorResponse" },
+              },
+            },
+          },
+          "409": {
+            description: "Email is linked with a different Google account",
             content: {
               "application/json": {
                 schema: { $ref: "#/components/schemas/ErrorResponse" },
@@ -929,6 +1161,167 @@ export const openApiSpec = {
           },
           "409": {
             description: "Duplicate bookmark",
+            content: {
+              "application/json": {
+                schema: { $ref: "#/components/schemas/ErrorResponse" },
+              },
+            },
+          },
+        },
+      },
+    },
+    "/api/bookmarks/paginated": {
+      get: {
+        tags: ["Bookmarks"],
+        summary: "Get paginated bookmarks for the logged-in user",
+        security: [{ bearerAuth: [] }],
+        parameters: [
+          {
+            name: "page",
+            in: "query",
+            required: false,
+            schema: { type: "number", example: 1 },
+            description: "Page number. Defaults to 1.",
+          },
+          {
+            name: "limit",
+            in: "query",
+            required: false,
+            schema: { type: "number", example: 20 },
+            description: "Items per page. Defaults to 20 and max is 100.",
+          },
+          {
+            name: "isArchive",
+            in: "query",
+            required: false,
+            schema: { type: "boolean" },
+            description: "Optional filter for archived or active bookmarks.",
+          },
+          {
+            name: "tagId",
+            in: "query",
+            required: false,
+            schema: { type: "string" },
+            description: "Optional tag ID filter.",
+          },
+        ],
+        responses: {
+          "200": {
+            description: "Paginated bookmarks fetched successfully",
+            content: {
+              "application/json": {
+                schema: {
+                  type: "object",
+                  properties: {
+                    success: { type: "boolean", example: true },
+                    message: {
+                      type: "string",
+                      example: "Bookmarks fetched successfully.",
+                    },
+                    data: {
+                      type: "array",
+                      items: { $ref: "#/components/schemas/Bookmark" },
+                    },
+                    pagination: { $ref: "#/components/schemas/PaginationMeta" },
+                  },
+                },
+              },
+            },
+          },
+          "400": {
+            description: "Validation error",
+            content: {
+              "application/json": {
+                schema: { $ref: "#/components/schemas/ErrorResponse" },
+              },
+            },
+          },
+          "401": {
+            description: "Unauthorized",
+            content: {
+              "application/json": {
+                schema: { $ref: "#/components/schemas/ErrorResponse" },
+              },
+            },
+          },
+        },
+      },
+    },
+    "/api/bookmarks/search": {
+      get: {
+        tags: ["Bookmarks"],
+        summary: "Search bookmarks for the logged-in user",
+        security: [{ bearerAuth: [] }],
+        parameters: [
+          {
+            name: "q",
+            in: "query",
+            required: true,
+            schema: { type: "string", example: "youtube" },
+            description: "Search term for bookmark url, title, or description.",
+          },
+          {
+            name: "page",
+            in: "query",
+            required: false,
+            schema: { type: "number", example: 1 },
+            description: "Page number. Defaults to 1.",
+          },
+          {
+            name: "limit",
+            in: "query",
+            required: false,
+            schema: { type: "number", example: 20 },
+            description: "Items per page. Defaults to 20 and max is 100.",
+          },
+          {
+            name: "isArchive",
+            in: "query",
+            required: false,
+            schema: { type: "boolean" },
+            description: "Optional filter for archived or active bookmarks.",
+          },
+          {
+            name: "tagId",
+            in: "query",
+            required: false,
+            schema: { type: "string" },
+            description: "Optional tag ID filter.",
+          },
+        ],
+        responses: {
+          "200": {
+            description: "Bookmarks search completed successfully",
+            content: {
+              "application/json": {
+                schema: {
+                  type: "object",
+                  properties: {
+                    success: { type: "boolean", example: true },
+                    message: {
+                      type: "string",
+                      example: "Bookmarks search completed successfully.",
+                    },
+                    data: {
+                      type: "array",
+                      items: { $ref: "#/components/schemas/Bookmark" },
+                    },
+                    pagination: { $ref: "#/components/schemas/PaginationMeta" },
+                  },
+                },
+              },
+            },
+          },
+          "400": {
+            description: "Validation error",
+            content: {
+              "application/json": {
+                schema: { $ref: "#/components/schemas/ErrorResponse" },
+              },
+            },
+          },
+          "401": {
+            description: "Unauthorized",
             content: {
               "application/json": {
                 schema: { $ref: "#/components/schemas/ErrorResponse" },

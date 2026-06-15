@@ -1,8 +1,8 @@
+import crypto from "node:crypto";
 import bcrypt from "bcryptjs";
 import { NextResponse } from "next/server";
 import { connectToDatabase } from "@/lib/db";
-import { signAccessToken } from "@/lib/jwt";
-import { getAuthCookieOptions } from "@/lib/session";
+import { PendingRegistration } from "@/models/PendingRegistration";
 import { User } from "@/models/User";
 
 type RegisterBody = {
@@ -37,41 +37,62 @@ export async function POST(request: Request) {
     const existingUser = await User.findOne({ email }).lean();
     if (existingUser) {
       return NextResponse.json(
-        { success: false, message: "Email is already registered." },
-        { status: 409 }
+        { success: false, message: "Email is already registered. Please login." },
+        { status: 409 },
+      );
+    }
+
+    const existingPendingRegistration = await PendingRegistration.findOne({ email }).lean();
+
+    if (existingPendingRegistration) {
+      return NextResponse.json(
+        {
+          success: false,
+          message: "Registration is pending verification. Please verify OTP or resend OTP.",
+          email,
+          requiresVerification: true,
+          canResendOtp: true,
+        },
+        { status: 409 },
       );
     }
 
     const passwordHash = await bcrypt.hash(password, 12);
-    const createdUser = await User.create({ name, email, passwordHash });
+    const registerOtp = Math.floor(100000 + Math.random() * 900000).toString();
+    const otpHash = crypto.createHash("sha256").update(registerOtp).digest("hex");
+    const otpExpiresAt = new Date(Date.now() + 1000 * 60 * 15);
 
-    const token = signAccessToken({
-      sub: createdUser._id.toString(),
-      email: createdUser.email,
-      name: createdUser.name,
-    });
-
-    const response = NextResponse.json(
+    await PendingRegistration.findOneAndUpdate(
+      { email },
       {
-        success: true,
-        message: "User registered successfully.",
-        user: {
-          id: createdUser._id.toString(),
-          name: createdUser.name,
-          email: createdUser.email,
-        },
+        name,
+        email,
+        passwordHash,
+        otpHash,
+        otpExpiresAt,
       },
-      { status: 201 }
+      {
+        upsert: true,
+        new: true,
+        setDefaultsOnInsert: true,
+      },
     );
 
-    response.cookies.set("access_token", token, getAuthCookieOptions());
-
-    return response;
+    return NextResponse.json(
+      {
+        success: true,
+        message: "Registration OTP generated successfully.",
+        email,
+        registerOtp,
+        expiresInMinutes: 15,
+      },
+      { status: 200 },
+    );
   } catch (error) {
     console.error("Register API error:", error);
     return NextResponse.json(
-      { success: false, message: "Something went wrong while registering." },
-      { status: 500 }
+      { success: false, message: "Something went wrong while starting registration." },
+      { status: 500 },
     );
   }
 }

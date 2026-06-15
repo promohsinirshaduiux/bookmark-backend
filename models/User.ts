@@ -4,7 +4,8 @@ const userSchema = new Schema(
   {
     name: { type: String, required: true, trim: true, minlength: 2, maxlength: 80 },
     email: { type: String, required: true, unique: true, lowercase: true, trim: true },
-    passwordHash: { type: String, required: true },
+    passwordHash: { type: String, default: null },
+    googleId: { type: String, default: null },
     resetPasswordTokenHash: { type: String, default: null },
     resetPasswordExpiresAt: { type: Date, default: null },
     myAppShortcutIds: {

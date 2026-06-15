@@ -25,7 +25,7 @@ function mapBookmark(bookmark: {
     _id: { toString(): string };
     name: string;
     color: string;
-  }>;
+  } | null>;
   isArchive?: boolean;
   createdAt?: Date;
   updatedAt?: Date;
@@ -37,11 +37,13 @@ function mapBookmark(bookmark: {
     description: bookmark.description ?? null,
     iconUrl: bookmark.iconUrl ?? null,
     tags:
-      bookmark.tagIds?.map((tag) => ({
-        id: tag._id.toString(),
-        name: tag.name,
-        color: tag.color,
-      })) ?? [],
+      bookmark.tagIds
+        ?.filter((tag): tag is NonNullable<typeof tag> => Boolean(tag))
+        .map((tag) => ({
+          id: tag._id.toString(),
+          name: tag.name,
+          color: tag.color,
+        })) ?? [],
     isArchive: bookmark.isArchive ?? false,
     createdAt: bookmark.createdAt ?? null,
     updatedAt: bookmark.updatedAt ?? null,

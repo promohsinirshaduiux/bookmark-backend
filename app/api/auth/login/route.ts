@@ -70,6 +70,7 @@ import { NextResponse } from "next/server";
 import { connectToDatabase } from "@/lib/db";
 import { signAccessToken } from "@/lib/jwt";
 import { getAuthCookieOptions } from "@/lib/session";
+import { PendingRegistration } from "@/models/PendingRegistration";
 import { User } from "@/models/User";
 
 type LoginBody = {
@@ -95,9 +96,42 @@ export async function POST(request: Request) {
     const user = await User.findOne({ email });
 
     if (!user) {
+      const pendingRegistration = await PendingRegistration.findOne({ email });
+
+      if (pendingRegistration) {
+        const isValidPendingPassword = await bcrypt.compare(
+          password,
+          pendingRegistration.passwordHash,
+        );
+
+        if (isValidPendingPassword) {
+          return NextResponse.json(
+            {
+              success: false,
+              message:
+                "Your account is not verified yet. Please verify OTP or request resend OTP.",
+              requiresVerification: true,
+              canResendOtp: true,
+              email,
+            },
+            { status: 403 },
+          );
+        }
+      }
+
       return NextResponse.json(
         { success: false, message: "Invalid credentials." },
         { status: 401 },
+      );
+    }
+
+    if (!user.passwordHash) {
+      return NextResponse.json(
+        {
+          success: false,
+          message: "This account uses Google login. Please continue with Google.",
+        },
+        { status: 400 },
       );
     }
 
