@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { authenticateRequest } from "@/lib/auth";
 import { connectToDatabase } from "@/lib/db";
-import { defaultTags, normalizeTagName } from "@/lib/tags";
+import { normalizeTagName } from "@/lib/tags";
 import { Bookmark } from "@/models/Bookmark";
 import { Tag } from "@/models/Tag";
 
@@ -26,23 +26,6 @@ function mapTag(tag: {
   };
 }
 
-async function seedDefaultTags(userId: string) {
-  const existingCount = await Tag.countDocuments({ userId });
-
-  if (existingCount === 0) {
-    await Tag.insertMany(
-      defaultTags.map((tag) => ({
-        userId,
-        name: tag.name,
-        normalizedName: normalizeTagName(tag.name),
-        color: tag.color,
-        isSystemDefault: false,
-      })),
-      { ordered: false },
-    );
-  }
-}
-
 export async function GET(request: NextRequest) {
   try {
     const auth = authenticateRequest(request);
@@ -52,7 +35,6 @@ export async function GET(request: NextRequest) {
     }
 
     await connectToDatabase();
-    await seedDefaultTags(auth.payload.sub);
 
     const tags = await Tag.find({ userId: auth.payload.sub }).sort({ name: 1 }).lean();
     const bookmarkCounts = await Bookmark.aggregate([
