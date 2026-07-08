@@ -1532,13 +1532,13 @@ export const openApiSpec = {
         summary: "Search bookmarks for the logged-in user",
         security: [{ bearerAuth: [] }],
         parameters: [
-          {
-            name: "q",
-            in: "query",
-            required: true,
-            schema: { type: "string", example: "youtube" },
-            description: "Search term for bookmark url, title, or description.",
-          },
+            {
+              name: "q",
+              in: "query",
+              required: true,
+              schema: { type: "string", example: "youtube" },
+              description: "Search term for bookmark url, title, description, or tag name.",
+            },
           {
             name: "page",
             in: "query",

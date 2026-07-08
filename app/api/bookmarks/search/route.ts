@@ -4,6 +4,7 @@ import { authenticateRequest } from "@/lib/auth";
 import { ensureBookmarkOrders } from "@/lib/bookmarkOrder";
 import { connectToDatabase } from "@/lib/db";
 import { Bookmark } from "@/models/Bookmark";
+import { Tag } from "@/models/Tag";
 
 function mapBookmark(bookmark: {
   _id: { toString(): string };
@@ -90,12 +91,22 @@ export async function GET(request: NextRequest) {
     }
 
     const regex = new RegExp(escapeRegExp(q), "i");
+    const matchingTags = await Tag.find({
+      userId: auth.payload.sub,
+      name: regex,
+    })
+      .select("_id")
+      .lean();
+
     const filter: Record<string, unknown> = {
       userId: auth.payload.sub,
       $or: [
         { url: regex },
         { title: regex },
         { description: regex },
+        ...(matchingTags.length > 0
+          ? [{ tagIds: { $in: matchingTags.map((tag) => tag._id) } }]
+          : []),
       ],
     };
 
