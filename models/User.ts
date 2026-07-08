@@ -32,6 +32,22 @@ const userSchema = new Schema(
       ],
       default: [],
     },
+    myAppShortcutOrder: {
+      type: [
+        new Schema(
+          {
+            id: { type: Schema.Types.ObjectId, required: true },
+            source: {
+              type: String,
+              required: true,
+              enum: ["system", "custom"],
+            },
+          },
+          { _id: false },
+        ),
+      ],
+      default: [],
+    },
   },
   {
     timestamps: true,

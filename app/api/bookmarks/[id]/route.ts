@@ -1,6 +1,7 @@
 import { Types } from "mongoose";
 import { NextRequest, NextResponse } from "next/server";
 import { authenticateRequest } from "@/lib/auth";
+import { getNextBookmarkOrder } from "@/lib/bookmarkOrder";
 import { normalizeBookmarkUrl } from "@/lib/bookmarks";
 import { connectToDatabase } from "@/lib/db";
 import { Bookmark } from "@/models/Bookmark";
@@ -27,6 +28,7 @@ function mapBookmark(bookmark: {
     color: string;
   }>;
   isArchive?: boolean;
+  order?: number;
   createdAt?: Date;
   updatedAt?: Date;
 }) {
@@ -43,6 +45,7 @@ function mapBookmark(bookmark: {
         color: tag.color,
       })) ?? [],
     isArchive: bookmark.isArchive ?? false,
+    order: bookmark.order ?? 0,
     createdAt: bookmark.createdAt ?? null,
     updatedAt: bookmark.updatedAt ?? null,
   };
@@ -197,6 +200,16 @@ export async function PATCH(
           { status: 409 },
         );
       }
+    }
+
+    if (
+      updates.isArchive !== undefined &&
+      updates.isArchive !== (currentBookmark.isArchive ?? false)
+    ) {
+      updates.order = await getNextBookmarkOrder(
+        auth.payload.sub,
+        updates.isArchive as boolean,
+      );
     }
 
     const updatedBookmark = await Bookmark.findOneAndUpdate(

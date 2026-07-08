@@ -116,6 +116,17 @@ export async function POST(request: NextRequest) {
         | undefined
     )?.find((item) => item.url === url);
 
+    if (createdShortcut) {
+      await User.findByIdAndUpdate(auth.payload.sub, {
+        $push: {
+          myAppShortcutOrder: {
+            id: createdShortcut._id,
+            source: "custom",
+          },
+        },
+      });
+    }
+
     return NextResponse.json(
       {
         success: true,

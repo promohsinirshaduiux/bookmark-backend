@@ -246,6 +246,7 @@ export const openApiSpec = {
             type: "array",
             items: { type: "string" },
             example: ["683c44c07bc9fb0f2b9e5701", "683c44c07bc9fb0f2b9e5702"],
+            description: "Pass an empty array to clear all system app shortcuts.",
           },
         },
       },
@@ -260,6 +261,35 @@ export const openApiSpec = {
           iconUrl: {
             type: "string",
             example: "https://example.com/favicon.ico",
+          },
+        },
+      },
+      UpdateMyCustomAppShortcutRequest: {
+        type: "object",
+        properties: {
+          url: { type: "string", example: "https://updated-example.com" },
+          title: { type: "string", example: "Updated shortcut title" },
+        },
+      },
+      MyAppShortcutOrderItem: {
+        type: "object",
+        required: ["id", "source"],
+        properties: {
+          id: { type: "string", example: "683c44c07bc9fb0f2b9e5701" },
+          source: {
+            type: "string",
+            enum: ["system", "custom"],
+            example: "custom",
+          },
+        },
+      },
+      ReorderMyAppShortcutsRequest: {
+        type: "object",
+        required: ["shortcuts"],
+        properties: {
+          shortcuts: {
+            type: "array",
+            items: { $ref: "#/components/schemas/MyAppShortcutOrderItem" },
           },
         },
       },
@@ -284,6 +314,7 @@ export const openApiSpec = {
             items: { $ref: "#/components/schemas/Tag" },
           },
           isArchive: { type: "boolean", example: false },
+          order: { type: "number", example: 1000 },
           createdAt: {
             type: "string",
             format: "date-time",
@@ -326,13 +357,42 @@ export const openApiSpec = {
           isArchive: { type: "boolean", example: false },
         },
       },
+      BulkCreateBookmarkItemRequest: {
+        type: "object",
+        required: ["url"],
+        properties: {
+          url: { type: "string", example: "https://example.com" },
+          title: { type: "string", example: "My bookmark" },
+          description: { type: "string", example: "What this page is about" },
+          iconUrl: {
+            type: "string",
+            example: "https://example.com/favicon.ico",
+          },
+          tagIds: {
+            type: "array",
+            items: { type: "string" },
+            example: ["683c44c07bc9fb0f2b9e5701"],
+          },
+          tagNames: {
+            type: "array",
+            items: { type: "string" },
+            example: ["work", "reference"],
+          },
+          isArchive: { type: "boolean", example: false },
+          createdDate: {
+            type: "string",
+            format: "date-time",
+            example: "2026-06-04T10:15:30.000Z",
+          },
+        },
+      },
       BulkCreateBookmarksRequest: {
         type: "object",
         required: ["bookmarks"],
         properties: {
           bookmarks: {
             type: "array",
-            items: { $ref: "#/components/schemas/CreateBookmarkRequest" },
+            items: { $ref: "#/components/schemas/BulkCreateBookmarkItemRequest" },
           },
         },
       },
@@ -352,6 +412,26 @@ export const openApiSpec = {
             example: ["683c44c07bc9fb0f2b9e5701"],
           },
           isArchive: { type: "boolean", example: true },
+        },
+      },
+      ReorderBookmarksRequest: {
+        type: "object",
+        required: ["movedBookmarkId"],
+        properties: {
+          movedBookmarkId: {
+            type: "string",
+            example: "683c44c07bc9fb0f2b9e5701",
+          },
+          prevBookmarkId: {
+            type: "string",
+            nullable: true,
+            example: "683c44c07bc9fb0f2b9e5702",
+          },
+          nextBookmarkId: {
+            type: "string",
+            nullable: true,
+            example: "683c44c07bc9fb0f2b9e5703",
+          },
         },
       },
       Tag: {
@@ -904,36 +984,37 @@ export const openApiSpec = {
           },
         },
       },
-      post: {
-        tags: ["My App Shortcuts"],
-        summary: "Attach one or more app shortcuts to logged-in user",
-        security: [{ bearerAuth: [] }],
-        requestBody: {
-          required: true,
-          content: {
+        post: {
+          tags: ["My App Shortcuts"],
+          summary: "Replace the logged-in user's system app shortcuts",
+          security: [{ bearerAuth: [] }],
+          requestBody: {
+            required: true,
+            content: {
             "application/json": {
               schema: { $ref: "#/components/schemas/AttachMyAppShortcutsRequest" },
             },
           },
         },
-        responses: {
-          "200": {
-            description: "Shortcuts attached successfully",
-            content: {
-              "application/json": {
-                schema: {
-                  type: "object",
-                  properties: {
-                    success: { type: "boolean", example: true },
-                    message: {
-                      type: "string",
-                      example: "App shortcuts attached to user successfully.",
+          responses: {
+            "200": {
+              description: "Shortcuts replaced successfully",
+              content: {
+                "application/json": {
+                  schema: {
+                    type: "object",
+                    properties: {
+                      success: { type: "boolean", example: true },
+                      message: {
+                        type: "string",
+                        example: "App shortcuts replaced successfully.",
+                      },
+                      addedCount: { type: "number", example: 1 },
+                      removedCount: { type: "number", example: 1 },
                     },
-                    attachedCount: { type: "number", example: 2 },
                   },
                 },
               },
-            },
           },
           "400": {
             description: "Validation error",
@@ -1023,6 +1104,204 @@ export const openApiSpec = {
           },
           "409": {
             description: "Shortcut already exists in user's shortcuts",
+            content: {
+              "application/json": {
+                schema: { $ref: "#/components/schemas/ErrorResponse" },
+              },
+            },
+          },
+        },
+      },
+    },
+    "/api/my-app-shortcuts/custom/{id}": {
+      patch: {
+        tags: ["My App Shortcuts"],
+        summary: "Update a custom shortcut for the logged-in user",
+        security: [{ bearerAuth: [] }],
+        parameters: [
+          {
+            name: "id",
+            in: "path",
+            required: true,
+            schema: { type: "string" },
+          },
+        ],
+        requestBody: {
+          required: true,
+          content: {
+            "application/json": {
+              schema: {
+                $ref: "#/components/schemas/UpdateMyCustomAppShortcutRequest",
+              },
+            },
+          },
+        },
+        responses: {
+          "200": {
+            description: "Custom shortcut updated successfully",
+            content: {
+              "application/json": {
+                schema: {
+                  type: "object",
+                  properties: {
+                    success: { type: "boolean", example: true },
+                    message: {
+                      type: "string",
+                      example: "Custom app shortcut updated successfully.",
+                    },
+                    data: { $ref: "#/components/schemas/AppShortcut" },
+                  },
+                },
+              },
+            },
+          },
+          "400": {
+            description: "Validation error",
+            content: {
+              "application/json": {
+                schema: { $ref: "#/components/schemas/ErrorResponse" },
+              },
+            },
+          },
+          "401": {
+            description: "Unauthorized",
+            content: {
+              "application/json": {
+                schema: { $ref: "#/components/schemas/ErrorResponse" },
+              },
+            },
+          },
+          "404": {
+            description: "Custom shortcut not found",
+            content: {
+              "application/json": {
+                schema: { $ref: "#/components/schemas/ErrorResponse" },
+              },
+            },
+          },
+          "409": {
+            description: "Duplicate shortcut",
+            content: {
+              "application/json": {
+                schema: { $ref: "#/components/schemas/ErrorResponse" },
+              },
+            },
+          },
+        },
+      },
+      delete: {
+        tags: ["My App Shortcuts"],
+        summary: "Delete a custom shortcut for the logged-in user",
+        security: [{ bearerAuth: [] }],
+        parameters: [
+          {
+            name: "id",
+            in: "path",
+            required: true,
+            schema: { type: "string" },
+          },
+        ],
+        responses: {
+          "200": {
+            description: "Custom shortcut deleted successfully",
+            content: {
+              "application/json": {
+                schema: {
+                  type: "object",
+                  properties: {
+                    success: { type: "boolean", example: true },
+                    message: {
+                      type: "string",
+                      example: "Custom app shortcut deleted successfully.",
+                    },
+                    data: { $ref: "#/components/schemas/AppShortcut" },
+                  },
+                },
+              },
+            },
+          },
+          "400": {
+            description: "Validation error",
+            content: {
+              "application/json": {
+                schema: { $ref: "#/components/schemas/ErrorResponse" },
+              },
+            },
+          },
+          "401": {
+            description: "Unauthorized",
+            content: {
+              "application/json": {
+                schema: { $ref: "#/components/schemas/ErrorResponse" },
+              },
+            },
+          },
+          "404": {
+            description: "Custom shortcut not found",
+            content: {
+              "application/json": {
+                schema: { $ref: "#/components/schemas/ErrorResponse" },
+              },
+            },
+          },
+        },
+      },
+    },
+    "/api/my-app-shortcuts/order": {
+      patch: {
+        tags: ["My App Shortcuts"],
+        summary: "Persist a new order for the logged-in user's app shortcuts",
+        security: [{ bearerAuth: [] }],
+        requestBody: {
+          required: true,
+          content: {
+            "application/json": {
+              schema: {
+                $ref: "#/components/schemas/ReorderMyAppShortcutsRequest",
+              },
+            },
+          },
+        },
+        responses: {
+          "200": {
+            description: "Shortcut order updated successfully",
+            content: {
+              "application/json": {
+                schema: {
+                  type: "object",
+                  properties: {
+                    success: { type: "boolean", example: true },
+                    message: {
+                      type: "string",
+                      example: "App shortcut order updated successfully.",
+                    },
+                    data: {
+                      type: "array",
+                      items: { $ref: "#/components/schemas/AppShortcut" },
+                    },
+                  },
+                },
+              },
+            },
+          },
+          "400": {
+            description: "Validation error",
+            content: {
+              "application/json": {
+                schema: { $ref: "#/components/schemas/ErrorResponse" },
+              },
+            },
+          },
+          "401": {
+            description: "Unauthorized",
+            content: {
+              "application/json": {
+                schema: { $ref: "#/components/schemas/ErrorResponse" },
+              },
+            },
+          },
+          "404": {
+            description: "User not found",
             content: {
               "application/json": {
                 schema: { $ref: "#/components/schemas/ErrorResponse" },
@@ -1412,6 +1691,72 @@ export const openApiSpec = {
         },
       },
     },
+    "/api/bookmarks/reorder": {
+      patch: {
+        tags: ["Bookmarks"],
+        summary: "Reorder bookmarks for the logged-in user",
+        security: [{ bearerAuth: [] }],
+        requestBody: {
+          required: true,
+          content: {
+            "application/json": {
+              schema: { $ref: "#/components/schemas/ReorderBookmarksRequest" },
+            },
+          },
+        },
+        responses: {
+          "200": {
+            description: "Bookmark reordered successfully",
+            content: {
+              "application/json": {
+                schema: {
+                  type: "object",
+                  properties: {
+                    success: { type: "boolean", example: true },
+                    message: {
+                      type: "string",
+                      example: "Bookmark reordered successfully.",
+                    },
+                    data: {
+                      type: "object",
+                      properties: {
+                        id: { type: "string", example: "683c44c07bc9fb0f2b9e5701" },
+                        order: { type: "number", example: 21500 },
+                        rebalanced: { type: "boolean", example: false },
+                      },
+                    },
+                  },
+                },
+              },
+            },
+          },
+          "400": {
+            description: "Validation error",
+            content: {
+              "application/json": {
+                schema: { $ref: "#/components/schemas/ErrorResponse" },
+              },
+            },
+          },
+          "401": {
+            description: "Unauthorized",
+            content: {
+              "application/json": {
+                schema: { $ref: "#/components/schemas/ErrorResponse" },
+              },
+            },
+          },
+          "404": {
+            description: "Bookmark not found",
+            content: {
+              "application/json": {
+                schema: { $ref: "#/components/schemas/ErrorResponse" },
+              },
+            },
+          },
+        },
+      },
+    },
     "/api/bookmarks/{id}": {
       patch: {
         tags: ["Bookmarks"],
@@ -1641,6 +1986,42 @@ export const openApiSpec = {
           },
           "409": {
             description: "Duplicate tag",
+            content: {
+              "application/json": {
+                schema: { $ref: "#/components/schemas/ErrorResponse" },
+              },
+            },
+          },
+        },
+      },
+    },
+    "/api/tags/custom": {
+      delete: {
+        tags: ["Tags"],
+        summary: "Delete all custom tags for the logged-in user",
+        security: [{ bearerAuth: [] }],
+        responses: {
+          "200": {
+            description: "Custom tags deleted successfully",
+            content: {
+              "application/json": {
+                schema: {
+                  type: "object",
+                  properties: {
+                    success: { type: "boolean", example: true },
+                    message: {
+                      type: "string",
+                      example: "Custom tags deleted successfully.",
+                    },
+                    deletedCount: { type: "number", example: 5 },
+                    updatedBookmarkCount: { type: "number", example: 12 },
+                  },
+                },
+              },
+            },
+          },
+          "401": {
+            description: "Unauthorized",
             content: {
               "application/json": {
                 schema: { $ref: "#/components/schemas/ErrorResponse" },

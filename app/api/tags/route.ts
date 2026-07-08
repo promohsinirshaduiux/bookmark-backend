@@ -36,7 +36,7 @@ async function seedDefaultTags(userId: string) {
         name: tag.name,
         normalizedName: normalizeTagName(tag.name),
         color: tag.color,
-        isSystemDefault: true,
+        isSystemDefault: false,
       })),
       { ordered: false },
     );

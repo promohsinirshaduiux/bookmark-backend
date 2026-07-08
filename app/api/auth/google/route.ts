@@ -13,15 +13,27 @@ type GoogleAuthBody = {
 
 const googleClient = new OAuth2Client(process.env.GOOGLE_CLIENT_ID);
 
+function getAllowedGoogleAudiences(clientType: GoogleAuthBody["clientType"]) {
+  const audiences = new Set<string>();
+
+  if (process.env.GOOGLE_CLIENT_ID) {
+    audiences.add(process.env.GOOGLE_CLIENT_ID);
+  }
+
+  if (clientType === "extension" && process.env.GOOGLE_EXTENSION_CLIENT_ID) {
+    audiences.add(process.env.GOOGLE_EXTENSION_CLIENT_ID);
+  }
+
+  return Array.from(audiences);
+}
+
 function getFallbackName(email: string) {
   return email.split("@")[0] || "Google User";
 }
 
 export async function POST(request: Request) {
   try {
-    const clientId = process.env.GOOGLE_CLIENT_ID;
-
-    if (!clientId) {
+    if (!process.env.GOOGLE_CLIENT_ID) {
       return NextResponse.json(
         { success: false, message: "Google auth is not configured." },
         { status: 500 },
@@ -31,6 +43,7 @@ export async function POST(request: Request) {
     const body = (await request.json()) as GoogleAuthBody;
     const idToken = body.idToken?.trim();
     const clientType = body.clientType === "extension" ? "extension" : "web";
+    const allowedAudiences = getAllowedGoogleAudiences(clientType);
 
     if (!idToken) {
       return NextResponse.json(
@@ -39,9 +52,16 @@ export async function POST(request: Request) {
       );
     }
 
+    if (allowedAudiences.length === 0) {
+      return NextResponse.json(
+        { success: false, message: "Google auth is not configured." },
+        { status: 500 },
+      );
+    }
+
     const ticket = await googleClient.verifyIdToken({
       idToken,
-      audience: clientId,
+      audience: allowedAudiences,
     });
 
     const payload = ticket.getPayload();

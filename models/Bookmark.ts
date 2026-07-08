@@ -10,10 +10,12 @@ const bookmarkSchema = new Schema(
     iconUrl: { type: String, trim: true, default: null },
     tagIds: { type: [{ type: Schema.Types.ObjectId, ref: "Tag" }], default: [] },
     isArchive: { type: Boolean, default: false },
+    order: { type: Number, required: true, default: 0 },
   },
   { timestamps: true },
 );
 
 bookmarkSchema.index({ userId: 1, normalizedUrl: 1 }, { unique: true });
+bookmarkSchema.index({ userId: 1, isArchive: 1, order: 1 });
 
 export const Bookmark = models.Bookmark || model("Bookmark", bookmarkSchema);

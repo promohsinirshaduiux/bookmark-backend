@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { Types } from "mongoose";
 import { authenticateRequest } from "@/lib/auth";
+import { ensureBookmarkOrders, getNextBookmarkOrder } from "@/lib/bookmarkOrder";
 import { normalizeBookmarkUrl } from "@/lib/bookmarks";
 import { connectToDatabase } from "@/lib/db";
 import { Bookmark } from "@/models/Bookmark";
@@ -27,6 +28,7 @@ function mapBookmark(bookmark: {
     color: string;
   } | null>;
   isArchive?: boolean;
+  order?: number;
   createdAt?: Date;
   updatedAt?: Date;
 }) {
@@ -45,6 +47,7 @@ function mapBookmark(bookmark: {
           color: tag.color,
         })) ?? [],
     isArchive: bookmark.isArchive ?? false,
+    order: bookmark.order ?? 0,
     createdAt: bookmark.createdAt ?? null,
     updatedAt: bookmark.updatedAt ?? null,
   };
@@ -75,9 +78,20 @@ export async function GET(request: NextRequest) {
       filter.tagIds = tagIdParam;
     }
 
+    if (isArchiveParam === "true") {
+      await ensureBookmarkOrders(auth.payload.sub, true);
+    } else if (isArchiveParam === "false") {
+      await ensureBookmarkOrders(auth.payload.sub, false);
+    } else {
+      await Promise.all([
+        ensureBookmarkOrders(auth.payload.sub, false),
+        ensureBookmarkOrders(auth.payload.sub, true),
+      ]);
+    }
+
     const bookmarks = await Bookmark.find(filter)
       .populate("tagIds", "name color")
-      .sort({ createdAt: -1 })
+      .sort({ isArchive: 1, order: 1, createdAt: -1, _id: 1 })
       .lean();
 
     return NextResponse.json({
@@ -195,6 +209,7 @@ export async function POST(request: NextRequest) {
       iconUrl,
       tagIds,
       isArchive,
+      order: await getNextBookmarkOrder(auth.payload.sub, isArchive),
     });
 
     const populatedBookmark = await Bookmark.findById(bookmark._id)

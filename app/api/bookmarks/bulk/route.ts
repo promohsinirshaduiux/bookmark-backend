@@ -1,8 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
 import { Types } from "mongoose";
 import { authenticateRequest } from "@/lib/auth";
+import { BOOKMARK_ORDER_GAP, getNextBookmarkOrder } from "@/lib/bookmarkOrder";
 import { normalizeBookmarkUrl } from "@/lib/bookmarks";
 import { connectToDatabase } from "@/lib/db";
+import { defaultTags, normalizeTagName } from "@/lib/tags";
 import { Bookmark } from "@/models/Bookmark";
 import { Tag } from "@/models/Tag";
 
@@ -12,12 +14,38 @@ type BulkBookmarkItem = {
   description?: string;
   iconUrl?: string;
   tagIds?: string[];
+  tagNames?: string[];
   isArchive?: boolean;
+  createdDate?: string;
 };
 
 type BulkCreateBookmarksBody = {
   bookmarks?: BulkBookmarkItem[];
 };
+
+function parseCreatedDate(value: string | undefined) {
+  const trimmedValue = value?.trim();
+
+  if (!trimmedValue) {
+    return { value: null as Date | null, error: null as string | null };
+  }
+
+  const parsedDate = new Date(trimmedValue);
+
+  if (Number.isNaN(parsedDate.getTime())) {
+    return { value: null as Date | null, error: "createdDate must be a valid date." };
+  }
+
+  return { value: parsedDate, error: null as string | null };
+}
+
+const defaultTagColorByName = new Map(
+  defaultTags.map((tag) => [normalizeTagName(tag.name), tag.color]),
+);
+
+function getRestoredTagColor(normalizedName: string) {
+  return defaultTagColorByName.get(normalizedName) ?? "#6B7280";
+}
 
 function mapBookmark(bookmark: {
   _id: { toString(): string };
@@ -31,6 +59,7 @@ function mapBookmark(bookmark: {
     color: string;
   }>;
   isArchive?: boolean;
+  order?: number;
   createdAt?: Date;
   updatedAt?: Date;
 }) {
@@ -47,6 +76,7 @@ function mapBookmark(bookmark: {
         color: tag.color,
       })) ?? [],
     isArchive: bookmark.isArchive ?? false,
+    order: bookmark.order ?? 0,
     createdAt: bookmark.createdAt ?? null,
     updatedAt: bookmark.updatedAt ?? null,
   };
@@ -84,33 +114,66 @@ export async function POST(request: NextRequest) {
         ),
       ),
     ];
+    const allTagNames = [
+      ...new Set(
+        bookmarks.flatMap((bookmark) =>
+          Array.isArray(bookmark.tagNames)
+            ? bookmark.tagNames.map((tagName) => tagName.trim()).filter(Boolean)
+            : [],
+        ),
+      ),
+    ];
 
-    if (!allTagIds.every((tagId) => Types.ObjectId.isValid(tagId))) {
-      return NextResponse.json(
-        {
-          success: false,
-          message: "One or more tag IDs are invalid.",
-        },
-        { status: 400 },
-      );
-    }
+    const validTagIds = allTagIds.filter((tagId) => Types.ObjectId.isValid(tagId));
+    const allowedTagIds = new Set<string>();
+    const allowedTagIdsByName = new Map<string, string>();
 
-    if (allTagIds.length > 0) {
+    if (validTagIds.length > 0) {
       const tags = await Tag.find({
-        _id: { $in: allTagIds },
+        _id: { $in: validTagIds },
         userId: auth.payload.sub,
       })
         .select("_id")
         .lean();
 
-      if (tags.length !== allTagIds.length) {
-        return NextResponse.json(
-          {
-            success: false,
-            message: "One or more tags were not found.",
-          },
-          { status: 404 },
+      for (const tag of tags) {
+        allowedTagIds.add(tag._id.toString());
+      }
+    }
+
+    const normalizedTagNames = [...new Set(allTagNames.map((tagName) => normalizeTagName(tagName)))];
+
+    if (normalizedTagNames.length > 0) {
+      const existingTags = await Tag.find({
+        userId: auth.payload.sub,
+        normalizedName: { $in: normalizedTagNames },
+      })
+        .select("_id normalizedName")
+        .lean();
+
+      for (const tag of existingTags) {
+        allowedTagIdsByName.set(tag.normalizedName, tag._id.toString());
+      }
+
+      const missingTagNames = normalizedTagNames.filter(
+        (normalizedName) => !allowedTagIdsByName.has(normalizedName),
+      );
+
+      if (missingTagNames.length > 0) {
+        const createdTags = await Tag.insertMany(
+          missingTagNames.map((normalizedName) => ({
+            userId: auth.payload.sub,
+            name: allTagNames.find((tagName) => normalizeTagName(tagName) === normalizedName) ?? normalizedName,
+            normalizedName,
+            color: getRestoredTagColor(normalizedName),
+            isSystemDefault: false,
+          })),
+          { ordered: false },
         );
+
+        for (const tag of createdTags) {
+          allowedTagIdsByName.set(tag.normalizedName, tag._id.toString());
+        }
       }
     }
 
@@ -122,6 +185,7 @@ export async function POST(request: NextRequest) {
       iconUrl: string | null;
       tagIds: string[];
       isArchive: boolean;
+      createdAt: Date | null;
     }> = [];
     const skipped: Array<{ url: string | null; reason: string }> = [];
     const payloadNormalizedUrls = new Set<string>();
@@ -157,6 +221,16 @@ export async function POST(request: NextRequest) {
         continue;
       }
 
+      const parsedCreatedDate = parseCreatedDate(item.createdDate);
+
+      if (parsedCreatedDate.error) {
+        skipped.push({
+          url,
+          reason: parsedCreatedDate.error,
+        });
+        continue;
+      }
+
       payloadNormalizedUrls.add(normalizedUrl);
 
       prepared.push({
@@ -165,10 +239,29 @@ export async function POST(request: NextRequest) {
         title: item.title?.trim() || null,
         description: item.description?.trim() || null,
         iconUrl: item.iconUrl?.trim() || null,
-        tagIds: Array.isArray(item.tagIds)
-          ? [...new Set(item.tagIds.map((tagId) => tagId.trim()).filter(Boolean))]
-          : [],
+        tagIds: [
+          ...(Array.isArray(item.tagIds)
+            ? [
+                ...new Set(
+                  item.tagIds
+                    .map((tagId) => tagId.trim())
+                    .filter((tagId) => Boolean(tagId) && allowedTagIds.has(tagId)),
+                ),
+              ]
+            : []),
+          ...(Array.isArray(item.tagNames)
+            ? [
+                ...new Set(
+                  item.tagNames
+                    .map((tagName) => normalizeTagName(tagName))
+                    .map((tagName) => allowedTagIdsByName.get(tagName))
+                    .filter((tagId): tagId is string => Boolean(tagId)),
+                ),
+              ]
+            : []),
+        ].filter((tagId, index, tagIds) => tagIds.indexOf(tagId) === index),
         isArchive: item.isArchive ?? false,
+        createdAt: parsedCreatedDate.value,
       });
     }
 
@@ -223,24 +316,41 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    const nextActiveOrder = await getNextBookmarkOrder(auth.payload.sub, false);
+    const nextArchiveOrder = await getNextBookmarkOrder(auth.payload.sub, true);
+    let activeOrder = nextActiveOrder;
+    let archiveOrder = nextArchiveOrder;
+
     const insertedBookmarks = await Bookmark.insertMany(
-      toInsert.map((item) => ({
-        userId: auth.payload.sub,
-        url: item.url,
-        normalizedUrl: item.normalizedUrl,
-        title: item.title,
-        description: item.description,
-        iconUrl: item.iconUrl,
-        tagIds: item.tagIds,
-        isArchive: item.isArchive,
-      })),
+      toInsert.map((item) => {
+        const order = item.isArchive ? archiveOrder : activeOrder;
+
+        if (item.isArchive) {
+          archiveOrder += BOOKMARK_ORDER_GAP;
+        } else {
+          activeOrder += BOOKMARK_ORDER_GAP;
+        }
+
+        return {
+          order,
+          userId: auth.payload.sub,
+          url: item.url,
+          normalizedUrl: item.normalizedUrl,
+          title: item.title,
+          description: item.description,
+          iconUrl: item.iconUrl,
+          tagIds: item.tagIds,
+          isArchive: item.isArchive,
+          ...(item.createdAt ? { createdAt: item.createdAt } : {}),
+        };
+      }),
       { ordered: false },
     );
 
     const insertedIds = insertedBookmarks.map((bookmark) => bookmark._id);
     const createdBookmarks = await Bookmark.find({ _id: { $in: insertedIds } })
       .populate("tagIds", "name color")
-      .sort({ createdAt: -1 })
+      .sort({ order: 1, createdAt: -1, _id: 1 })
       .lean();
 
     return NextResponse.json({
