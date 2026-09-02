@@ -69,6 +69,7 @@ export async function GET(request: NextRequest) {
     const searchParams = request.nextUrl.searchParams;
     const isArchiveParam = searchParams.get("isArchive");
     const tagIdParam = searchParams.get("tagId");
+    const notTaggedParam = searchParams.get("notTagged");
     const page = parsePositiveInteger(searchParams.get("page"), 1);
     const requestedLimit = parsePositiveInteger(searchParams.get("limit"), 20);
     const limit = Math.min(requestedLimit, 100);
@@ -94,6 +95,11 @@ export async function GET(request: NextRequest) {
       }
 
       filter.tagIds = new Types.ObjectId(tagIdParam);
+    } else if (notTaggedParam === "true") {
+      filter.$or = [
+        { tagIds: { $exists: false } },
+        { tagIds: { $size: 0 } },
+      ];
     }
 
     if (isArchiveParam === "true") {

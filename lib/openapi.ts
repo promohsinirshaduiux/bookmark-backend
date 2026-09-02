@@ -338,6 +338,15 @@ export const openApiSpec = {
           hasPreviousPage: { type: "boolean", example: false },
         },
       },
+      BookmarkStats: {
+        type: "object",
+        properties: {
+          activeCount: { type: "number", example: 4101 },
+          archivedCount: { type: "number", example: 0 },
+          untaggedCount: { type: "number", example: 48 },
+          unreachableCount: { type: "number", example: 7 },
+        },
+      },
       CreateBookmarkRequest: {
         type: "object",
         required: ["url"],
@@ -1483,6 +1492,14 @@ export const openApiSpec = {
             schema: { type: "string" },
             description: "Optional tag ID filter.",
           },
+          {
+            name: "notTagged",
+            in: "query",
+            required: false,
+            schema: { type: "boolean", example: true },
+            description:
+              "When true, returns only bookmarks without tags. Ignored when tagId is provided.",
+          },
         ],
         responses: {
           "200": {
@@ -1596,6 +1613,37 @@ export const openApiSpec = {
             content: {
               "application/json": {
                 schema: { $ref: "#/components/schemas/ErrorResponse" },
+              },
+            },
+          },
+          "401": {
+            description: "Unauthorized",
+            content: {
+              "application/json": {
+                schema: { $ref: "#/components/schemas/ErrorResponse" },
+              },
+            },
+          },
+        },
+      },
+    },
+    "/api/bookmarks/stats": {
+      get: {
+        tags: ["Bookmarks"],
+        summary: "Get bookmark stats for the logged-in user",
+        security: [{ bearerAuth: [] }],
+        responses: {
+          "200": {
+            description: "Bookmark stats fetched successfully",
+            content: {
+              "application/json": {
+                schema: {
+                  type: "object",
+                  properties: {
+                    success: { type: "boolean", example: true },
+                    data: { $ref: "#/components/schemas/BookmarkStats" },
+                  },
+                },
               },
             },
           },
