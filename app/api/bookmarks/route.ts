@@ -91,7 +91,7 @@ export async function GET(request: NextRequest) {
 
     const bookmarks = await Bookmark.find(filter)
       .populate("tagIds", "name color")
-      .sort({ isArchive: 1, order: 1, createdAt: -1, _id: 1 })
+      .sort({ isArchive: 1, order: -1, createdAt: -1, _id: 1 })
       .lean();
 
     return NextResponse.json({

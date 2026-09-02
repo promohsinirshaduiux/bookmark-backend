@@ -350,7 +350,7 @@ export async function POST(request: NextRequest) {
     const insertedIds = insertedBookmarks.map((bookmark) => bookmark._id);
     const createdBookmarks = await Bookmark.find({ _id: { $in: insertedIds } })
       .populate("tagIds", "name color")
-      .sort({ order: 1, createdAt: -1, _id: 1 })
+      .sort({ order: -1, createdAt: -1, _id: 1 })
       .lean();
 
     return NextResponse.json({

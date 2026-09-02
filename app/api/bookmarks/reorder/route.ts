@@ -155,7 +155,7 @@ export async function PATCH(request: NextRequest) {
       isArchive: scopeIsArchive,
     })
       .select("_id order createdAt")
-      .sort({ order: 1, createdAt: -1, _id: 1 })
+      .sort({ order: -1, createdAt: -1, _id: 1 })
       .lean();
 
     const currentIds = scopeBookmarks.map((bookmark) => bookmark._id.toString());
@@ -238,7 +238,7 @@ export async function PATCH(request: NextRequest) {
       : null;
 
     if (typeof previousOrderValue === "number" && typeof nextOrderValue === "number") {
-      if (nextOrderValue - previousOrderValue > 1) {
+      if (previousOrderValue - nextOrderValue > 1) {
         const newOrder = Math.floor((previousOrderValue + nextOrderValue) / 2);
 
         await Bookmark.updateOne(
@@ -256,8 +256,8 @@ export async function PATCH(request: NextRequest) {
           },
         });
       }
-    } else if (typeof previousOrderValue === "number") {
-      const newOrder = previousOrderValue + BOOKMARK_ORDER_GAP;
+    } else if (typeof previousOrderValue === "number" && previousOrderValue > 1) {
+      const newOrder = Math.max(1, previousOrderValue - BOOKMARK_ORDER_GAP);
 
       await Bookmark.updateOne(
         { _id: movedBookmarkId, userId: auth.payload.sub },
@@ -273,8 +273,8 @@ export async function PATCH(request: NextRequest) {
           rebalanced: false,
         },
       });
-    } else if (typeof nextOrderValue === "number" && nextOrderValue > 1) {
-      const newOrder = Math.max(1, nextOrderValue - BOOKMARK_ORDER_GAP);
+    } else if (typeof nextOrderValue === "number") {
+      const newOrder = nextOrderValue + BOOKMARK_ORDER_GAP;
 
       if (newOrder < nextOrderValue) {
         await Bookmark.updateOne(
@@ -300,7 +300,7 @@ export async function PATCH(request: NextRequest) {
           filter: { _id: id, userId: auth.payload.sub },
           update: {
             $set: {
-              order: (index + 1) * BOOKMARK_ORDER_GAP,
+              order: (reorderedIds.length - index) * BOOKMARK_ORDER_GAP,
             },
           },
         },
@@ -312,7 +312,7 @@ export async function PATCH(request: NextRequest) {
       message: "Bookmark reordered successfully.",
       data: {
         id: movedBookmarkId,
-        order: (targetIndex + 1) * BOOKMARK_ORDER_GAP,
+        order: (reorderedIds.length - targetIndex) * BOOKMARK_ORDER_GAP,
         rebalanced: true,
       },
     });

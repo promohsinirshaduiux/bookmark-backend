@@ -16,6 +16,6 @@ const bookmarkSchema = new Schema(
 );
 
 bookmarkSchema.index({ userId: 1, normalizedUrl: 1 }, { unique: true });
-bookmarkSchema.index({ userId: 1, isArchive: 1, order: 1 });
+bookmarkSchema.index({ userId: 1, isArchive: 1, order: -1 });
 
 export const Bookmark = models.Bookmark || model("Bookmark", bookmarkSchema);
