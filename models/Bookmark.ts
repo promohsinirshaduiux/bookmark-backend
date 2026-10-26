@@ -8,6 +8,20 @@ const bookmarkSchema = new Schema(
     title: { type: String, trim: true, default: null },
     description: { type: String, trim: true, default: null },
     iconUrl: { type: String, trim: true, default: null },
+    siteName: { type: String, trim: true, default: null },
+    previewImage: { type: String, trim: true, default: null },
+    metadataStatus: {
+      type: String,
+      enum: ["pending", "ready", "failed"],
+      default: "pending",
+    },
+    metadataFetchedAt: { type: Date, default: null },
+    reachabilityStatus: {
+      type: String,
+      enum: ["unknown", "reachable", "unreachable"],
+      default: "unknown",
+    },
+    reachabilityCheckedAt: { type: Date, default: null },
     tagIds: { type: [{ type: Schema.Types.ObjectId, ref: "Tag" }], default: [] },
     isArchive: { type: Boolean, default: false },
     order: { type: Number, required: true, default: 0 },
@@ -17,5 +31,6 @@ const bookmarkSchema = new Schema(
 
 bookmarkSchema.index({ userId: 1, normalizedUrl: 1 }, { unique: true });
 bookmarkSchema.index({ userId: 1, isArchive: 1, order: -1 });
+bookmarkSchema.index({ userId: 1, isArchive: 1, reachabilityStatus: 1 });
 
 export const Bookmark = models.Bookmark || model("Bookmark", bookmarkSchema);

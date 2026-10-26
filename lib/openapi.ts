@@ -105,6 +105,30 @@ export const openApiSpec = {
           },
         },
       },
+      GoogleCodeAuthRequest: {
+        type: "object",
+        required: ["code", "codeVerifier", "redirectUri", "clientType"],
+        properties: {
+          code: {
+            type: "string",
+            example: "4/0AQSTgQExampleGoogleAuthorizationCode",
+          },
+          codeVerifier: {
+            type: "string",
+            example: "bZ8gQ7YxTt7t8xTcnjQ2V5v3R8oL2Qm7XbTjR2mK9YdGqF6nYw",
+          },
+          redirectUri: {
+            type: "string",
+            format: "uri",
+            example: "https://your-frontend-domain.com/auth/google/callback",
+          },
+          clientType: {
+            type: "string",
+            enum: ["web"],
+            example: "web",
+          },
+        },
+      },
       ForgotRequest: {
         type: "object",
         required: ["email"],
@@ -150,10 +174,6 @@ export const openApiSpec = {
         properties: {
           success: { type: "boolean", example: true },
           message: { type: "string", example: "Login successful." },
-          token: {
-            type: "string",
-            example: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
-          },
           user: { $ref: "#/components/schemas/User" },
         },
       },
@@ -673,7 +693,7 @@ export const openApiSpec = {
     "/api/auth/google": {
       post: {
         tags: ["Auth"],
-        summary: "Login or register user with Google",
+        summary: "Login or register user with a Google ID token",
         requestBody: {
           required: true,
           content: {
@@ -684,7 +704,7 @@ export const openApiSpec = {
         },
         responses: {
           "200": {
-            description: "Google login successful",
+            description: "Signed in with Google successfully",
             content: {
               "application/json": {
                 schema: { $ref: "#/components/schemas/AuthSuccessResponse" },
@@ -701,6 +721,54 @@ export const openApiSpec = {
           },
           "409": {
             description: "Email is linked with a different Google account",
+            content: {
+              "application/json": {
+                schema: { $ref: "#/components/schemas/ErrorResponse" },
+              },
+            },
+          },
+        },
+      },
+    },
+    "/api/auth/google/code": {
+      post: {
+        tags: ["Auth"],
+        summary: "Exchange a Google authorization code with PKCE and sign in",
+        requestBody: {
+          required: true,
+          content: {
+            "application/json": {
+              schema: { $ref: "#/components/schemas/GoogleCodeAuthRequest" },
+            },
+          },
+        },
+        responses: {
+          "200": {
+            description: "Signed in with Google successfully",
+            content: {
+              "application/json": {
+                schema: { $ref: "#/components/schemas/AuthSuccessResponse" },
+              },
+            },
+          },
+          "400": {
+            description: "Validation error, PKCE error, or invalid Google response",
+            content: {
+              "application/json": {
+                schema: { $ref: "#/components/schemas/ErrorResponse" },
+              },
+            },
+          },
+          "409": {
+            description: "Email is linked with a different Google account",
+            content: {
+              "application/json": {
+                schema: { $ref: "#/components/schemas/ErrorResponse" },
+              },
+            },
+          },
+          "500": {
+            description: "Google auth is not configured or a server error occurred",
             content: {
               "application/json": {
                 schema: { $ref: "#/components/schemas/ErrorResponse" },

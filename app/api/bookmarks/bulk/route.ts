@@ -2,7 +2,11 @@ import { NextRequest, NextResponse } from "next/server";
 import { Types } from "mongoose";
 import { authenticateRequest } from "@/lib/auth";
 import { BOOKMARK_ORDER_GAP, getNextBookmarkOrder } from "@/lib/bookmarkOrder";
-import { normalizeBookmarkUrl } from "@/lib/bookmarks";
+import {
+  mapBookmark,
+  normalizeBookmarkUrl,
+  type BookmarkRecord,
+} from "@/lib/bookmarks";
 import { connectToDatabase } from "@/lib/db";
 import { defaultTags, normalizeTagName } from "@/lib/tags";
 import { Bookmark } from "@/models/Bookmark";
@@ -13,6 +17,8 @@ type BulkBookmarkItem = {
   title?: string;
   description?: string;
   iconUrl?: string;
+  siteName?: string;
+  previewImage?: string;
   tagIds?: string[];
   tagNames?: string[];
   isArchive?: boolean;
@@ -33,7 +39,10 @@ function parseCreatedDate(value: string | undefined) {
   const parsedDate = new Date(trimmedValue);
 
   if (Number.isNaN(parsedDate.getTime())) {
-    return { value: null as Date | null, error: "createdDate must be a valid date." };
+    return {
+      value: null as Date | null,
+      error: "createdDate must be a valid date.",
+    };
   }
 
   return { value: parsedDate, error: null as string | null };
@@ -44,42 +53,7 @@ const defaultTagColorByName = new Map(
 );
 
 function getRestoredTagColor(normalizedName: string) {
-  return defaultTagColorByName.get(normalizedName) ?? "#6B7280";
-}
-
-function mapBookmark(bookmark: {
-  _id: { toString(): string };
-  url: string;
-  title?: string | null;
-  description?: string | null;
-  iconUrl?: string | null;
-  tagIds?: Array<{
-    _id: { toString(): string };
-    name: string;
-    color: string;
-  }>;
-  isArchive?: boolean;
-  order?: number;
-  createdAt?: Date;
-  updatedAt?: Date;
-}) {
-  return {
-    id: bookmark._id.toString(),
-    url: bookmark.url,
-    title: bookmark.title ?? null,
-    description: bookmark.description ?? null,
-    iconUrl: bookmark.iconUrl ?? null,
-    tags:
-      bookmark.tagIds?.map((tag) => ({
-        id: tag._id.toString(),
-        name: tag.name,
-        color: tag.color,
-      })) ?? [],
-    isArchive: bookmark.isArchive ?? false,
-    order: bookmark.order ?? 0,
-    createdAt: bookmark.createdAt ?? null,
-    updatedAt: bookmark.updatedAt ?? null,
-  };
+  return defaultTagColorByName.get(normalizedName) ?? "#ffffff";
 }
 
 export async function POST(request: NextRequest) {
@@ -124,7 +98,9 @@ export async function POST(request: NextRequest) {
       ),
     ];
 
-    const validTagIds = allTagIds.filter((tagId) => Types.ObjectId.isValid(tagId));
+    const validTagIds = allTagIds.filter((tagId) =>
+      Types.ObjectId.isValid(tagId),
+    );
     const allowedTagIds = new Set<string>();
     const allowedTagIdsByName = new Map<string, string>();
 
@@ -141,7 +117,9 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    const normalizedTagNames = [...new Set(allTagNames.map((tagName) => normalizeTagName(tagName)))];
+    const normalizedTagNames = [
+      ...new Set(allTagNames.map((tagName) => normalizeTagName(tagName))),
+    ];
 
     if (normalizedTagNames.length > 0) {
       const existingTags = await Tag.find({
@@ -163,7 +141,10 @@ export async function POST(request: NextRequest) {
         const createdTags = await Tag.insertMany(
           missingTagNames.map((normalizedName) => ({
             userId: auth.payload.sub,
-            name: allTagNames.find((tagName) => normalizeTagName(tagName) === normalizedName) ?? normalizedName,
+            name:
+              allTagNames.find(
+                (tagName) => normalizeTagName(tagName) === normalizedName,
+              ) ?? normalizedName,
             normalizedName,
             color: getRestoredTagColor(normalizedName),
             isSystemDefault: false,
@@ -183,6 +164,8 @@ export async function POST(request: NextRequest) {
       title: string | null;
       description: string | null;
       iconUrl: string | null;
+      siteName: string | null;
+      previewImage: string | null;
       tagIds: string[];
       isArchive: boolean;
       createdAt: Date | null;
@@ -239,13 +222,17 @@ export async function POST(request: NextRequest) {
         title: item.title?.trim() || null,
         description: item.description?.trim() || null,
         iconUrl: item.iconUrl?.trim() || null,
+        siteName: item.siteName?.trim() || null,
+        previewImage: item.previewImage?.trim() || null,
         tagIds: [
           ...(Array.isArray(item.tagIds)
             ? [
                 ...new Set(
                   item.tagIds
                     .map((tagId) => tagId.trim())
-                    .filter((tagId) => Boolean(tagId) && allowedTagIds.has(tagId)),
+                    .filter(
+                      (tagId) => Boolean(tagId) && allowedTagIds.has(tagId),
+                    ),
                 ),
               ]
             : []),
@@ -339,6 +326,12 @@ export async function POST(request: NextRequest) {
           title: item.title,
           description: item.description,
           iconUrl: item.iconUrl,
+          siteName: item.siteName,
+          previewImage: item.previewImage,
+          metadataStatus: "pending",
+          metadataFetchedAt: null,
+          reachabilityStatus: "unknown",
+          reachabilityCheckedAt: null,
           tagIds: item.tagIds,
           isArchive: item.isArchive,
           ...(item.createdAt ? { createdAt: item.createdAt } : {}),
@@ -359,7 +352,9 @@ export async function POST(request: NextRequest) {
       createdCount: createdBookmarks.length,
       skippedCount: skipped.length,
       skipped,
-      data: createdBookmarks.map(mapBookmark),
+      data: createdBookmarks.map((bookmark) =>
+        mapBookmark(bookmark as BookmarkRecord),
+      ),
     });
   } catch (error) {
     console.error("Bulk create bookmarks API error:", error);

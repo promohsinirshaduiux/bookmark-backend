@@ -2,7 +2,12 @@ import { Types } from "mongoose";
 import { NextRequest, NextResponse } from "next/server";
 import { authenticateRequest } from "@/lib/auth";
 import { getNextBookmarkOrder } from "@/lib/bookmarkOrder";
-import { normalizeBookmarkUrl } from "@/lib/bookmarks";
+import { fetchBookmarkMetadata } from "@/lib/bookmarkMetadata";
+import {
+  mapBookmark,
+  normalizeBookmarkUrl,
+  type BookmarkRecord,
+} from "@/lib/bookmarks";
 import { connectToDatabase } from "@/lib/db";
 import { Bookmark } from "@/models/Bookmark";
 import { Tag } from "@/models/Tag";
@@ -15,41 +20,6 @@ type UpdateBookmarkBody = {
   tagIds?: string[];
   isArchive?: boolean;
 };
-
-function mapBookmark(bookmark: {
-  _id: { toString(): string };
-  url: string;
-  title?: string | null;
-  description?: string | null;
-  iconUrl?: string | null;
-  tagIds?: Array<{
-    _id: { toString(): string };
-    name: string;
-    color: string;
-  }>;
-  isArchive?: boolean;
-  order?: number;
-  createdAt?: Date;
-  updatedAt?: Date;
-}) {
-  return {
-    id: bookmark._id.toString(),
-    url: bookmark.url,
-    title: bookmark.title ?? null,
-    description: bookmark.description ?? null,
-    iconUrl: bookmark.iconUrl ?? null,
-    tags:
-      bookmark.tagIds?.map((tag) => ({
-        id: tag._id.toString(),
-        name: tag.name,
-        color: tag.color,
-      })) ?? [],
-    isArchive: bookmark.isArchive ?? false,
-    order: bookmark.order ?? 0,
-    createdAt: bookmark.createdAt ?? null,
-    updatedAt: bookmark.updatedAt ?? null,
-  };
-}
 
 export async function PATCH(
   request: NextRequest,
@@ -200,6 +170,24 @@ export async function PATCH(
           { status: 409 },
         );
       }
+
+      if (updates.normalizedUrl !== currentBookmark.normalizedUrl) {
+        const metadata = await fetchBookmarkMetadata(updates.url as string);
+        const checkedAt = new Date();
+
+        if (body.title === undefined) updates.title = metadata.title;
+        if (body.description === undefined) {
+          updates.description = metadata.description;
+        }
+
+        updates.iconUrl = updates.iconUrl ?? metadata.iconUrl ?? null;
+        updates.siteName = metadata.siteName;
+        updates.previewImage = metadata.previewImage;
+        updates.metadataStatus = metadata.metadataStatus;
+        updates.metadataFetchedAt = checkedAt;
+        updates.reachabilityStatus = metadata.reachabilityStatus;
+        updates.reachabilityCheckedAt = checkedAt;
+      }
     }
 
     if (
@@ -223,7 +211,7 @@ export async function PATCH(
     return NextResponse.json({
       success: true,
       message: "Bookmark updated successfully.",
-      data: mapBookmark(updatedBookmark!),
+      data: mapBookmark(updatedBookmark as BookmarkRecord),
     });
   } catch (error) {
     console.error("Update bookmark API error:", error);

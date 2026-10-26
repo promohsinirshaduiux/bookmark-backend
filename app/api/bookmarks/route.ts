@@ -2,7 +2,12 @@ import { NextRequest, NextResponse } from "next/server";
 import { Types } from "mongoose";
 import { authenticateRequest } from "@/lib/auth";
 import { ensureBookmarkOrders, getNextBookmarkOrder } from "@/lib/bookmarkOrder";
-import { normalizeBookmarkUrl } from "@/lib/bookmarks";
+import { fetchBookmarkMetadata } from "@/lib/bookmarkMetadata";
+import {
+  mapBookmark,
+  normalizeBookmarkUrl,
+  type BookmarkRecord,
+} from "@/lib/bookmarks";
 import { connectToDatabase } from "@/lib/db";
 import { Bookmark } from "@/models/Bookmark";
 import { Tag } from "@/models/Tag";
@@ -15,43 +20,6 @@ type CreateBookmarkBody = {
   tagIds?: string[];
   isArchive?: boolean;
 };
-
-function mapBookmark(bookmark: {
-  _id: { toString(): string };
-  url: string;
-  title?: string | null;
-  description?: string | null;
-  iconUrl?: string | null;
-  tagIds?: Array<{
-    _id: { toString(): string };
-    name: string;
-    color: string;
-  } | null>;
-  isArchive?: boolean;
-  order?: number;
-  createdAt?: Date;
-  updatedAt?: Date;
-}) {
-  return {
-    id: bookmark._id.toString(),
-    url: bookmark.url,
-    title: bookmark.title ?? null,
-    description: bookmark.description ?? null,
-    iconUrl: bookmark.iconUrl ?? null,
-    tags:
-      bookmark.tagIds
-        ?.filter((tag): tag is NonNullable<typeof tag> => Boolean(tag))
-        .map((tag) => ({
-          id: tag._id.toString(),
-          name: tag.name,
-          color: tag.color,
-        })) ?? [],
-    isArchive: bookmark.isArchive ?? false,
-    order: bookmark.order ?? 0,
-    createdAt: bookmark.createdAt ?? null,
-    updatedAt: bookmark.updatedAt ?? null,
-  };
-}
 
 export async function GET(request: NextRequest) {
   try {
@@ -66,7 +34,21 @@ export async function GET(request: NextRequest) {
     const searchParams = request.nextUrl.searchParams;
     const isArchiveParam = searchParams.get("isArchive");
     const tagIdParam = searchParams.get("tagId");
+    const reachabilityStatus = searchParams.get("reachabilityStatus");
     const filter: Record<string, unknown> = { userId: auth.payload.sub };
+
+    if (
+      reachabilityStatus &&
+      !["unknown", "reachable", "unreachable"].includes(reachabilityStatus)
+    ) {
+      return NextResponse.json(
+        {
+          success: false,
+          message: "Invalid reachabilityStatus.",
+        },
+        { status: 400 },
+      );
+    }
 
     if (isArchiveParam === "true") {
       filter.isArchive = true;
@@ -76,6 +58,10 @@ export async function GET(request: NextRequest) {
 
     if (tagIdParam && Types.ObjectId.isValid(tagIdParam)) {
       filter.tagIds = tagIdParam;
+    }
+
+    if (reachabilityStatus) {
+      filter.reachabilityStatus = reachabilityStatus;
     }
 
     if (isArchiveParam === "true") {
@@ -97,7 +83,7 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({
       success: true,
       message: "Bookmarks fetched successfully.",
-      data: bookmarks.map(mapBookmark),
+      data: bookmarks.map((bookmark) => mapBookmark(bookmark as BookmarkRecord)),
     });
   } catch (error) {
     console.error("Get bookmarks API error:", error);
@@ -200,16 +186,28 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    const [metadata, order] = await Promise.all([
+      fetchBookmarkMetadata(url),
+      getNextBookmarkOrder(auth.payload.sub, isArchive),
+    ]);
+    const metadataCheckedAt = new Date();
+
     const bookmark = await Bookmark.create({
       userId: auth.payload.sub,
       url,
       normalizedUrl,
-      title,
-      description,
-      iconUrl,
+      title: title ?? metadata.title,
+      description: description ?? metadata.description,
+      iconUrl: iconUrl ?? metadata.iconUrl,
+      siteName: metadata.siteName,
+      previewImage: metadata.previewImage,
+      metadataStatus: metadata.metadataStatus,
+      metadataFetchedAt: metadataCheckedAt,
+      reachabilityStatus: metadata.reachabilityStatus,
+      reachabilityCheckedAt: metadataCheckedAt,
       tagIds,
       isArchive,
-      order: await getNextBookmarkOrder(auth.payload.sub, isArchive),
+      order,
     });
 
     const populatedBookmark = await Bookmark.findById(bookmark._id)
@@ -220,7 +218,7 @@ export async function POST(request: NextRequest) {
       {
         success: true,
         message: "Bookmark added successfully.",
-        data: mapBookmark(populatedBookmark!),
+        data: mapBookmark(populatedBookmark as BookmarkRecord),
       },
       { status: 201 },
     );

@@ -2,45 +2,9 @@ import { NextRequest, NextResponse } from "next/server";
 import { Types } from "mongoose";
 import { authenticateRequest } from "@/lib/auth";
 import { ensureBookmarkOrders } from "@/lib/bookmarkOrder";
+import { mapBookmark, type BookmarkRecord } from "@/lib/bookmarks";
 import { connectToDatabase } from "@/lib/db";
 import { Bookmark } from "@/models/Bookmark";
-
-function mapBookmark(bookmark: {
-  _id: { toString(): string };
-  url: string;
-  title?: string | null;
-  description?: string | null;
-  iconUrl?: string | null;
-  tagIds?: Array<{
-    _id: { toString(): string };
-    name: string;
-    color: string;
-  } | null>;
-  isArchive?: boolean;
-  order?: number;
-  createdAt?: Date;
-  updatedAt?: Date;
-}) {
-  return {
-    id: bookmark._id.toString(),
-    url: bookmark.url,
-    title: bookmark.title ?? null,
-    description: bookmark.description ?? null,
-    iconUrl: bookmark.iconUrl ?? null,
-    tags:
-      bookmark.tagIds
-        ?.filter((tag): tag is NonNullable<typeof tag> => Boolean(tag))
-        .map((tag) => ({
-          id: tag._id.toString(),
-          name: tag.name,
-          color: tag.color,
-        })) ?? [],
-    isArchive: bookmark.isArchive ?? false,
-    order: bookmark.order ?? 0,
-    createdAt: bookmark.createdAt ?? null,
-    updatedAt: bookmark.updatedAt ?? null,
-  };
-}
 
 function parsePositiveInteger(value: string | null, fallback: number) {
   if (!value) {
@@ -70,6 +34,7 @@ export async function GET(request: NextRequest) {
     const isArchiveParam = searchParams.get("isArchive");
     const tagIdParam = searchParams.get("tagId");
     const notTaggedParam = searchParams.get("notTagged");
+    const reachabilityStatus = searchParams.get("reachabilityStatus");
     const page = parsePositiveInteger(searchParams.get("page"), 1);
     const requestedLimit = parsePositiveInteger(searchParams.get("limit"), 20);
     const limit = Math.min(requestedLimit, 100);
@@ -77,10 +42,27 @@ export async function GET(request: NextRequest) {
 
     const filter: Record<string, unknown> = { userId: auth.payload.sub };
 
+    if (
+      reachabilityStatus &&
+      !["unknown", "reachable", "unreachable"].includes(reachabilityStatus)
+    ) {
+      return NextResponse.json(
+        {
+          success: false,
+          message: "Invalid reachabilityStatus.",
+        },
+        { status: 400 },
+      );
+    }
+
     if (isArchiveParam === "true") {
       filter.isArchive = true;
     } else if (isArchiveParam === "false") {
       filter.isArchive = false;
+    }
+
+    if (reachabilityStatus) {
+      filter.reachabilityStatus = reachabilityStatus;
     }
 
     if (tagIdParam) {
@@ -128,7 +110,7 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({
       success: true,
       message: "Bookmarks fetched successfully.",
-      data: bookmarks.map(mapBookmark),
+      data: bookmarks.map((bookmark) => mapBookmark(bookmark as BookmarkRecord)),
       pagination: {
         page,
         limit,
